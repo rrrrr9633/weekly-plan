@@ -14,8 +14,8 @@ com/weeklyplan/project/ProjectController.class
 com/weeklyplan/user/RoleRepository.class
 com/weeklyplan/plan/BatchCreateWeekPlanRequest$PlanItem.class
 com/weeklyplan/project/ProjectResponse.class
-com/weeklyplan/auth/AuthRequest.class
 com/weeklyplan/auth/JwtService.class
+com/weeklyplan/auth/AuthRequest.class
 com/weeklyplan/plan/WeekPlanService.class
 com/weeklyplan/user/UserController.class
 com/weeklyplan/project/UpdateProjectRequest.class
