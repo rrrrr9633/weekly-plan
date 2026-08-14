@@ -27,6 +27,7 @@ public class UserService {
     String username = request.username().trim().toLowerCase(Locale.ROOT);
     if (users.existsByUsernameAndIdNot(username, id)) throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
     user.update(username, request.username().trim(), resolveRole(request.role()));
+    users.save(user);
     return UserResponse.of(user);
   }
 
