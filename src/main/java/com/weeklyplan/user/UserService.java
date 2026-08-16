@@ -49,7 +49,7 @@ public class UserService {
   public void updateMyPassword(String currentUserId, UpdatePasswordRequest request) {
     AppUser user = requireUser(parseId(currentUserId));
     if (!passwords.matches(request.currentPassword(), user.getPasswordHash())) {
-      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "当前密码不正确");
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前密码不正确");
     }
     user.updatePassword(passwords.encode(request.newPassword()));
     users.save(user);
