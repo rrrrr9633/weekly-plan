@@ -20,7 +20,7 @@ spring:
 app:
   security:
     jwt-secret: ${JWT_SECRET:change-this-development-secret-to-a-32-byte-minimum-key}
-    access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:120}
+    access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:43200}
   bootstrap-admin:
     username: ${BOOTSTRAP_ADMIN_USERNAME:admin}
     password: ${BOOTSTRAP_ADMIN_PASSWORD:Admin12345}

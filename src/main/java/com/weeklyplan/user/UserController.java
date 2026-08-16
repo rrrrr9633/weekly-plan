@@ -1,7 +1,6 @@
 package com.weeklyplan.user;
 
 import com.weeklyplan.auth.UserResponse;
-import com.weeklyplan.auth.AuthResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -15,7 +14,9 @@ public class UserController {
   @GetMapping public List<UserResponse> list() { return users.list(); }
   @PostMapping @ResponseStatus(HttpStatus.CREATED) public UserResponse create(@Valid @RequestBody CreateUserRequest request) { return users.create(request); }
   @GetMapping("/me") public UserResponse getMyProfile(Authentication authentication) { return users.getMyProfile(authentication.getName()); }
-  @PutMapping("/me") public AuthResponse updateMyProfile(Authentication authentication, @Valid @RequestBody UpdateMyProfileRequest request) { return users.updateMyProfile(authentication.getName(), request); }
+  @PutMapping("/me") public UserResponse updateMyProfile(Authentication authentication, @Valid @RequestBody UpdateMyProfileRequest request) { return users.updateMyProfile(authentication.getName(), request); }
+  @PutMapping("/me/password") @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void updateMyPassword(Authentication authentication, @Valid @RequestBody UpdatePasswordRequest request) { users.updateMyPassword(authentication.getName(), request); }
   @PutMapping("/{id}") public UserResponse update(@PathVariable Long id, @Valid @RequestBody UpdateUserRequest request) { return users.update(id, request); }
   @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(Authentication authentication, @PathVariable Long id) { users.delete(id, authentication.getName()); }

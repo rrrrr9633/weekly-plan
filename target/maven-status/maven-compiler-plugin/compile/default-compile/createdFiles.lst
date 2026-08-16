@@ -14,8 +14,8 @@ com/weeklyplan/project/ProjectController.class
 com/weeklyplan/user/RoleRepository.class
 com/weeklyplan/plan/BatchCreateWeekPlanRequest$PlanItem.class
 com/weeklyplan/project/ProjectResponse.class
-com/weeklyplan/auth/JwtService.class
 com/weeklyplan/auth/AuthRequest.class
+com/weeklyplan/auth/JwtService.class
 com/weeklyplan/plan/WeekPlanService.class
 com/weeklyplan/user/UserController.class
 com/weeklyplan/project/UpdateProjectRequest.class
@@ -24,6 +24,7 @@ com/weeklyplan/user/CreateUserRequest.class
 com/weeklyplan/common/ApiExceptionHandler$ApiErrorResponse.class
 com/weeklyplan/config/BootstrapAdminConfig.class
 com/weeklyplan/project/Project.class
+com/weeklyplan/user/UpdatePasswordRequest.class
 com/weeklyplan/common/ApiExceptionHandler.class
 com/weeklyplan/plan/BatchCreateWeekPlanRequest.class
 com/weeklyplan/user/Role.class
@@ -39,5 +40,6 @@ com/weeklyplan/plan/WeekPlan.class
 com/weeklyplan/plan/WeekPlanController.class
 com/weeklyplan/user/UserStatus.class
 com/weeklyplan/WeeklyPlanApplication.class
+com/weeklyplan/user/UpdateMyProfileRequest.class
 com/weeklyplan/auth/AuthService.class
 com/weeklyplan/user/UserService.class

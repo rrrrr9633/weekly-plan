@@ -139,11 +139,16 @@ public class WeekPlanService {
         .with(WeekFields.ISO.dayOfWeek(), 1);
     return new WeekPlanResponse(
         String.valueOf(plan.getId()), String.valueOf(plan.getProject().getId()), plan.getProject().getName(), plan.getProject().getCode(),
-        String.valueOf(plan.getUser().getId()), plan.getUser().getDisplayName(), plan.getYear(), plan.getWeekNumber(),
+        String.valueOf(plan.getUser().getId()), plan.getUser().getUsername(), displayNameOf(plan.getUser()), plan.getYear(), plan.getWeekNumber(),
         plan.getWeekday().name().toLowerCase(Locale.ROOT), weekStart, weekStart.plusDays(6), plan.getContent(),
         plan.getAssignedBy() == null ? null : plan.getAssignedBy().getDisplayName(), plan.getAssignedBy() != null,
         plan.getStatus().name().toLowerCase(Locale.ROOT), plan.getArchivedAt(),
         plan.getBoardPosition() == null ? null : plan.getBoardPosition().longValue(), plan.getCreatedAt(), plan.getUpdatedAt());
+  }
+
+  private String displayNameOf(AppUser user) {
+    String displayName = user.getDisplayName();
+    return displayName == null || displayName.isBlank() ? user.getUsername() : displayName;
   }
 
   private int compareByWeekdayThenBoardPositionThenCreatedAt(WeekPlan left, WeekPlan right) {

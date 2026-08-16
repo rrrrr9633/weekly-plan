@@ -1,8 +1,6 @@
 package com.weeklyplan.user;
 
 import com.weeklyplan.auth.UserResponse;
-import com.weeklyplan.auth.AuthResponse;
-import com.weeklyplan.auth.JwtService;
 import com.weeklyplan.plan.WeekPlanRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -13,8 +11,8 @@ import java.util.Locale;
 
 @Service
 public class UserService {
-  private final UserRepository users; private final RoleRepository roles; private final PasswordEncoder passwords; private final WeekPlanRepository plans; private final JwtService jwt;
-  public UserService(UserRepository users, RoleRepository roles, PasswordEncoder passwords, WeekPlanRepository plans, JwtService jwt) { this.users = users; this.roles = roles; this.passwords = passwords; this.plans = plans; this.jwt = jwt; }
+  private final UserRepository users; private final RoleRepository roles; private final PasswordEncoder passwords; private final WeekPlanRepository plans;
+  public UserService(UserRepository users, RoleRepository roles, PasswordEncoder passwords, WeekPlanRepository plans) { this.users = users; this.roles = roles; this.passwords = passwords; this.plans = plans; }
   public List<UserResponse> list() { return users.findAll().stream().map(UserResponse::of).toList(); }
   public UserResponse create(CreateUserRequest request) {
     String username = request.username().trim().toLowerCase(Locale.ROOT);
@@ -37,17 +35,24 @@ public class UserService {
     return UserResponse.of(requireUser(parseId(currentUserId)));
   }
 
-  public AuthResponse updateMyProfile(String currentUserId, UpdateMyProfileRequest request) {
+  public UserResponse updateMyProfile(String currentUserId, UpdateMyProfileRequest request) {
+    AppUser user = requireUser(parseId(currentUserId));
+    String displayName = request.displayName().trim();
+    if (displayName.length() < 2 || displayName.length() > 30) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "姓名长度应为 2–30 个字符");
+    }
+    user.update(user.getUsername(), displayName, user.getRole());
+    users.save(user);
+    return UserResponse.of(user);
+  }
+
+  public void updateMyPassword(String currentUserId, UpdatePasswordRequest request) {
     AppUser user = requireUser(parseId(currentUserId));
     if (!passwords.matches(request.currentPassword(), user.getPasswordHash())) {
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "当前密码不正确");
     }
-    user.update(user.getUsername(), request.displayName().trim(), user.getRole());
-    if (request.newPassword() != null && !request.newPassword().isBlank()) {
-      user.updatePassword(passwords.encode(request.newPassword()));
-    }
+    user.updatePassword(passwords.encode(request.newPassword()));
     users.save(user);
-    return AuthResponse.of(jwt.createAccessToken(user), user);
   }
 
   public void delete(Long id, String currentUserId) {
