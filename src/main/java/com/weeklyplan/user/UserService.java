@@ -1,6 +1,8 @@
 package com.weeklyplan.user;
 
 import com.weeklyplan.auth.UserResponse;
+import com.weeklyplan.auth.AuthResponse;
+import com.weeklyplan.auth.JwtService;
 import com.weeklyplan.plan.WeekPlanRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -11,8 +13,8 @@ import java.util.Locale;
 
 @Service
 public class UserService {
-  private final UserRepository users; private final RoleRepository roles; private final PasswordEncoder passwords; private final WeekPlanRepository plans;
-  public UserService(UserRepository users, RoleRepository roles, PasswordEncoder passwords, WeekPlanRepository plans) { this.users = users; this.roles = roles; this.passwords = passwords; this.plans = plans; }
+  private final UserRepository users; private final RoleRepository roles; private final PasswordEncoder passwords; private final WeekPlanRepository plans; private final JwtService jwt;
+  public UserService(UserRepository users, RoleRepository roles, PasswordEncoder passwords, WeekPlanRepository plans, JwtService jwt) { this.users = users; this.roles = roles; this.passwords = passwords; this.plans = plans; this.jwt = jwt; }
   public List<UserResponse> list() { return users.findAll().stream().map(UserResponse::of).toList(); }
   public UserResponse create(CreateUserRequest request) {
     String username = request.username().trim().toLowerCase(Locale.ROOT);
@@ -29,6 +31,23 @@ public class UserService {
     user.update(username, request.username().trim(), resolveRole(request.role()));
     users.save(user);
     return UserResponse.of(user);
+  }
+
+  public AuthResponse updateMyProfile(String currentUserId, UpdateMyProfileRequest request) {
+    AppUser user = requireUser(parseId(currentUserId));
+    if (!passwords.matches(request.currentPassword(), user.getPasswordHash())) {
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "当前密码不正确");
+    }
+    String username = request.username().trim().toLowerCase(Locale.ROOT);
+    if (users.existsByUsernameAndIdNot(username, user.getId())) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
+    }
+    user.update(username, request.username().trim(), user.getRole());
+    if (request.newPassword() != null && !request.newPassword().isBlank()) {
+      user.updatePassword(passwords.encode(request.newPassword()));
+    }
+    users.save(user);
+    return AuthResponse.of(jwt.createAccessToken(user), user);
   }
 
   public void delete(Long id, String currentUserId) {

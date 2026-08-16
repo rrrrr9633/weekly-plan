@@ -23,6 +23,7 @@ public class SecurityConfig {
     return http.csrf(csrf -> csrf.disable()).cors(cors -> {}).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
       .authorizeHttpRequests(auth -> auth
         .requestMatchers("/auth/**", "/error").permitAll()
+        .requestMatchers("/users/me").authenticated()
         .requestMatchers("/users/**").hasRole("ADMIN")
         .requestMatchers(HttpMethod.GET, "/projects/**").authenticated()
         .requestMatchers("/projects/**", "/plans/assign").hasRole("ADMIN")

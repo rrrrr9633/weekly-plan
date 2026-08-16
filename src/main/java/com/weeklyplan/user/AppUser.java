@@ -21,6 +21,7 @@ public class AppUser {
   public String getDisplayName() { return displayName; } public Role getRole() { return role; } public UserStatus getStatus() { return status; }
   public String getPasswordHash() { return passwordHash; } public Instant getCreatedAt() { return createdAt; }
   public void setLastLoginAt(Instant value) { lastLoginAt = value; }
+  public void updatePassword(String passwordHash) { this.passwordHash = passwordHash; this.updatedAt = Instant.now(); }
   public void update(String username, String displayName, Role role) {
     this.username = username; this.displayName = displayName; this.role = role; this.updatedAt = Instant.now();
   }
