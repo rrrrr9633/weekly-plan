@@ -14,6 +14,7 @@ public class UserController {
   public UserController(UserService users) { this.users = users; }
   @GetMapping public List<UserResponse> list() { return users.list(); }
   @PostMapping @ResponseStatus(HttpStatus.CREATED) public UserResponse create(@Valid @RequestBody CreateUserRequest request) { return users.create(request); }
+  @GetMapping("/me") public UserResponse getMyProfile(Authentication authentication) { return users.getMyProfile(authentication.getName()); }
   @PutMapping("/me") public AuthResponse updateMyProfile(Authentication authentication, @Valid @RequestBody UpdateMyProfileRequest request) { return users.updateMyProfile(authentication.getName(), request); }
   @PutMapping("/{id}") public UserResponse update(@PathVariable Long id, @Valid @RequestBody UpdateUserRequest request) { return users.update(id, request); }
   @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT)

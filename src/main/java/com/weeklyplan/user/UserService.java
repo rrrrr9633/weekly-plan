@@ -33,16 +33,16 @@ public class UserService {
     return UserResponse.of(user);
   }
 
+  public UserResponse getMyProfile(String currentUserId) {
+    return UserResponse.of(requireUser(parseId(currentUserId)));
+  }
+
   public AuthResponse updateMyProfile(String currentUserId, UpdateMyProfileRequest request) {
     AppUser user = requireUser(parseId(currentUserId));
     if (!passwords.matches(request.currentPassword(), user.getPasswordHash())) {
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "当前密码不正确");
     }
-    String username = request.username().trim().toLowerCase(Locale.ROOT);
-    if (users.existsByUsernameAndIdNot(username, user.getId())) {
-      throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
-    }
-    user.update(username, request.username().trim(), user.getRole());
+    user.update(user.getUsername(), request.displayName().trim(), user.getRole());
     if (request.newPassword() != null && !request.newPassword().isBlank()) {
       user.updatePassword(passwords.encode(request.newPassword()));
     }
