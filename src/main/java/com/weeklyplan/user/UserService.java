@@ -2,6 +2,7 @@ package com.weeklyplan.user;
 
 import com.weeklyplan.auth.UserResponse;
 import com.weeklyplan.plan.WeekPlanRepository;
+import com.weeklyplan.tenant.TenantAccessService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -11,19 +12,24 @@ import java.util.Locale;
 
 @Service
 public class UserService {
-  private final UserRepository users; private final RoleRepository roles; private final PasswordEncoder passwords; private final WeekPlanRepository plans;
-  public UserService(UserRepository users, RoleRepository roles, PasswordEncoder passwords, WeekPlanRepository plans) { this.users = users; this.roles = roles; this.passwords = passwords; this.plans = plans; }
-  public List<UserResponse> list() { return users.findAll().stream().map(UserResponse::of).toList(); }
+  private final UserRepository users; private final RoleRepository roles; private final PasswordEncoder passwords; private final WeekPlanRepository plans; private final TenantAccessService tenant;
+  public UserService(UserRepository users, RoleRepository roles, PasswordEncoder passwords, WeekPlanRepository plans, TenantAccessService tenant) { this.users = users; this.roles = roles; this.passwords = passwords; this.plans = plans; this.tenant = tenant; }
+  public List<UserResponse> list() {
+    List<AppUser> result = tenant.isSuperAdmin() ? users.findAll() : users.findByCompanyId(tenant.currentCompany().getId());
+    return result.stream().map(UserResponse::of).toList();
+  }
   public UserResponse create(CreateUserRequest request) {
     String username = request.username().trim().toLowerCase(Locale.ROOT);
     if (users.existsByUsername(username)) throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
     Role role = resolveRole(request.role());
-    AppUser user = users.save(AppUser.create("U" + System.currentTimeMillis(), username, passwords.encode(request.password()), request.username().trim(), role));
+    AppUser user = AppUser.create("U" + System.currentTimeMillis(), username, passwords.encode(request.password()), request.username().trim(), role);
+    user.setCompany(tenant.currentCompany());
+    user = users.save(user);
     return UserResponse.of(user);
   }
 
   public UserResponse update(Long id, UpdateUserRequest request) {
-    AppUser user = requireUser(id);
+    AppUser user = requireManagedUser(id);
     String username = request.username().trim().toLowerCase(Locale.ROOT);
     if (users.existsByUsernameAndIdNot(username, id)) throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
     user.update(username, request.username().trim(), resolveRole(request.role()));
@@ -60,7 +66,13 @@ public class UserService {
     if (plans.existsByUserId(id) || plans.existsByAssignedById(id)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "该用户已有周计划关联记录，不能删除");
     }
-    users.delete(requireUser(id));
+    users.delete(requireManagedUser(id));
+  }
+
+  private AppUser requireManagedUser(Long id) {
+    AppUser user = requireUser(id);
+    tenant.assertCompany(user);
+    return user;
   }
 
   private AppUser requireUser(Long id) {

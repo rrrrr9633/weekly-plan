@@ -22,11 +22,12 @@ public class SecurityConfig {
   @Bean SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwt) throws Exception {
     return http.csrf(csrf -> csrf.disable()).cors(cors -> {}).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
       .authorizeHttpRequests(auth -> auth
-        .requestMatchers("/auth/**", "/error").permitAll()
+        .requestMatchers("/auth/**", "/companies/public", "/error").permitAll()
+        .requestMatchers("/companies/**").hasRole("SUPER_ADMIN")
         .requestMatchers("/users/me", "/users/me/**").authenticated()
-        .requestMatchers("/users/**").hasRole("ADMIN")
+        .requestMatchers("/users/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
         .requestMatchers(HttpMethod.GET, "/projects/**").authenticated()
-        .requestMatchers("/projects/**", "/plans/assign").hasRole("ADMIN")
+        .requestMatchers("/projects/**", "/plans/assign").hasAnyRole("ADMIN", "SUPER_ADMIN")
         .requestMatchers("/plans/**").authenticated()
         .anyRequest().authenticated())
       .addFilterBefore(jwt, UsernamePasswordAuthenticationFilter.class).build();

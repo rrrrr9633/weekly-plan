@@ -1,5 +1,6 @@
 package com.weeklyplan.config;
 
+import com.weeklyplan.company.CompanyRepository;
 import com.weeklyplan.user.AppUser;
 import com.weeklyplan.user.Role;
 import com.weeklyplan.user.RoleRepository;
@@ -14,16 +15,31 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 public class BootstrapAdminConfig {
   @Bean
   CommandLineRunner bootstrapAdmin(
+    CompanyRepository companies,
     UserRepository users,
     RoleRepository roles,
     PasswordEncoder passwords,
     @Value("${app.bootstrap-admin.username}") String username,
-    @Value("${app.bootstrap-admin.password}") String password
+    @Value("${app.bootstrap-admin.password}") String password,
+    @Value("${app.bootstrap-super-admin.username:}") String superAdminUsername,
+    @Value("${app.bootstrap-super-admin.password:}") String superAdminPassword,
+    @Value("${app.bootstrap-super-admin.display-name:超级管理员}") String superAdminDisplayName
   ) {
     return args -> {
-      if (users.existsByUsername(username)) return;
       Role adminRole = roles.findByCode("ADMIN").orElseThrow();
-      users.save(AppUser.create("ADMIN-001", username, passwords.encode(password), "系统总台", adminRole));
+      if (!users.existsByUsername(username)) {
+        AppUser admin = AppUser.create("ADMIN-001", username, passwords.encode(password), "系统总台", adminRole);
+        admin.setCompany(companies.findByCode("LIAONING_GUQI_DATA").orElseThrow());
+        users.save(admin);
+      }
+      if (!superAdminUsername.isBlank() && !superAdminPassword.isBlank()) {
+        Role superAdminRole = roles.findByCode("SUPER_ADMIN").orElseThrow();
+        AppUser superAdmin = users.findByUsername(superAdminUsername).orElseGet(() ->
+            AppUser.create("SUPER-001", superAdminUsername, passwords.encode(superAdminPassword), superAdminDisplayName, superAdminRole));
+        superAdmin.update(superAdminUsername, superAdminDisplayName, superAdminRole);
+        superAdmin.setCompany(null);
+        users.save(superAdmin);
+      }
     };
   }
 }

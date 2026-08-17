@@ -3,6 +3,7 @@ package com.weeklyplan.plan;
 import com.weeklyplan.project.Project;
 import com.weeklyplan.project.ProjectService;
 import com.weeklyplan.project.ProjectStatus;
+import com.weeklyplan.tenant.TenantAccessService;
 import com.weeklyplan.user.AppUser;
 import com.weeklyplan.user.UserRepository;
 import org.springframework.http.HttpStatus;
@@ -21,9 +22,10 @@ public class WeekPlanService {
   private final WeekPlanRepository plans;
   private final ProjectService projects;
   private final UserRepository users;
+  private final TenantAccessService tenant;
 
-  public WeekPlanService(WeekPlanRepository plans, ProjectService projects, UserRepository users) {
-    this.plans = plans; this.projects = projects; this.users = users;
+  public WeekPlanService(WeekPlanRepository plans, ProjectService projects, UserRepository users, TenantAccessService tenant) {
+    this.plans = plans; this.projects = projects; this.users = users; this.tenant = tenant;
   }
 
   @Transactional(readOnly = true)
@@ -34,7 +36,9 @@ public class WeekPlanService {
 
   @Transactional(readOnly = true)
   public List<WeekPlanResponse> listTeam(int year, int week) {
+    Long companyId = tenant.currentCompany().getId();
     return plans.findByYearAndWeekNumberOrderByUserDisplayNameAscCreatedAtDesc(year, week).stream()
+        .filter(plan -> plan.getProject().getCompany().getId().equals(companyId))
         .sorted(this::compareByWeekdayThenBoardPositionThenCreatedAt).map(this::toResponse).toList();
   }
 
@@ -46,6 +50,7 @@ public class WeekPlanService {
   @Transactional
   public WeekPlanResponse create(String userId, CreateWeekPlanRequest request) {
     AppUser user = requireUser(parseId(userId));
+    tenant.assertCompany(user);
     Project project = requireActiveProject(request.projectId());
     return toResponse(plans.save(WeekPlan.create(
         project, user, null, request.year(), request.weekNumber(), request.weekday(), request.content().trim())));
@@ -54,6 +59,7 @@ public class WeekPlanService {
   @Transactional
   public List<WeekPlanResponse> createBatch(String userId, BatchCreateWeekPlanRequest request) {
     AppUser user = requireUser(parseId(userId));
+    tenant.assertCompany(user);
     Project project = requireActiveProject(request.projectId());
     List<WeekPlan> createdPlans = request.plans().stream()
         .map(item -> WeekPlan.create(
@@ -102,6 +108,7 @@ public class WeekPlanService {
   @Transactional
   public List<WeekPlanResponse> saveBoardOrder(String userId, SaveBoardOrderRequest request) {
     requireUser(parseId(userId));
+    projects.requireProject(request.projectId());
     List<WeekPlan> scopedPlans = plans.findByProjectIdAndYearAndWeekNumberAndWeekday(
         request.projectId(), request.year(), request.weekNumber(), request.weekday());
     Set<Long> submittedIds = new HashSet<>(request.planIds());
@@ -120,6 +127,7 @@ public class WeekPlanService {
   @Transactional
   public void restoreBoardOrder(String userId, Long projectId, int year, int weekNumber, PlanWeekday weekday) {
     requireUser(parseId(userId));
+    projects.requireProject(projectId);
     plans.findByProjectIdAndYearAndWeekNumberAndWeekday(projectId, year, weekNumber, weekday)
         .forEach(plan -> plan.setBoardPosition(null));
   }
@@ -127,8 +135,10 @@ public class WeekPlanService {
   @Transactional
   public WeekPlanResponse assign(String adminId, AssignWeekPlanRequest request) {
     AppUser admin = requireUser(parseId(adminId));
+    tenant.assertCompany(admin);
     Project project = requireActiveProject(request.projectId());
     AppUser user = requireUser(request.userId());
+    tenant.assertCompany(user);
     return toResponse(plans.save(WeekPlan.create(
         project, user, admin, request.year(), request.weekNumber(), request.weekday(), request.content().trim())));
   }

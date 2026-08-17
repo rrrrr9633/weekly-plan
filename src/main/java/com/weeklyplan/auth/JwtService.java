@@ -19,7 +19,8 @@ public class JwtService {
   }
   public String createAccessToken(AppUser user) {
     Instant now = Instant.now();
-    return Jwts.builder().subject(user.getId().toString()).claim("username", user.getUsername()).claim("role", user.getRole().getCode())
-      .issuedAt(Date.from(now)).expiration(Date.from(now.plusSeconds(accessTokenMinutes * 60))).signWith(key).compact();
+    var token = Jwts.builder().subject(user.getId().toString()).claim("username", user.getUsername()).claim("role", user.getRole().getCode());
+    if (user.getCompany() != null) token.claim("companyId", user.getCompany().getId().toString());
+    return token.issuedAt(Date.from(now)).expiration(Date.from(now.plusSeconds(accessTokenMinutes * 60))).signWith(key).compact();
   }
 }

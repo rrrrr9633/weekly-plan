@@ -1,5 +1,6 @@
 package com.weeklyplan.user;
 
+import com.weeklyplan.company.Company;
 import jakarta.persistence.*;
 import java.time.Instant;
 
@@ -14,12 +15,14 @@ public class AppUser {
   private String phone;
   @Enumerated(EnumType.STRING) @Column(nullable = false) private UserStatus status;
   @ManyToOne(fetch = FetchType.EAGER) @JoinColumn(name = "role_id", nullable = false) private Role role;
+  @ManyToOne(fetch = FetchType.EAGER) @JoinColumn(name = "company_id") private Company company;
   @Column(name = "last_login_at") private Instant lastLoginAt;
   @Column(name = "created_at", nullable = false) private Instant createdAt;
   @Column(name = "updated_at", nullable = false) private Instant updatedAt;
   public Long getId() { return id; } public String getUserCode() { return userCode; } public String getUsername() { return username; }
-  public String getDisplayName() { return displayName; } public Role getRole() { return role; } public UserStatus getStatus() { return status; }
+  public String getDisplayName() { return displayName; } public Role getRole() { return role; } public Company getCompany() { return company; } public UserStatus getStatus() { return status; }
   public String getPasswordHash() { return passwordHash; } public Instant getCreatedAt() { return createdAt; }
+  public void setCompany(Company company) { this.company = company; }
   public void setLastLoginAt(Instant value) { lastLoginAt = value; }
   public void updatePassword(String passwordHash) { this.passwordHash = passwordHash; this.updatedAt = Instant.now(); }
   public void update(String username, String displayName, Role role) {
