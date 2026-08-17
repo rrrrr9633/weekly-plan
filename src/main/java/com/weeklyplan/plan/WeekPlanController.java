@@ -3,20 +3,36 @@ package com.weeklyplan.plan;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.ContentDisposition;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
 @RequestMapping("/plans")
 public class WeekPlanController {
   private final WeekPlanService plans;
-  public WeekPlanController(WeekPlanService plans) { this.plans = plans; }
+  private final WeekPlanReportService reports;
+  public WeekPlanController(WeekPlanService plans, WeekPlanReportService reports) {
+    this.plans = plans;
+    this.reports = reports;
+  }
 
   @GetMapping("/my/{year}/{week}")
   public List<WeekPlanResponse> listMine(Authentication authentication, @PathVariable int year, @PathVariable int week) {
     return plans.listMine(authentication.getName(), year, week);
+  }
+
+  @GetMapping("/my/{year}/{week}/report")
+  public ResponseEntity<byte[]> exportMyReport(Authentication authentication, @PathVariable int year, @PathVariable int week) {
+    byte[] report = reports.exportMine(Long.valueOf(authentication.getName()), year, week);
+    String filename = year + "年第" + week + "周个人周报.xlsx";
+    return ResponseEntity.ok()
+        .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
+        .body(report);
   }
 
   @GetMapping("/week/{year}/{week}")

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface WeekPlanRepository extends JpaRepository<WeekPlan, Long> {
+  List<WeekPlan> findByUserIdAndYearAndWeekNumberOrderByCreatedAtAsc(Long userId, int year, int weekNumber);
   List<WeekPlan> findByUserIdAndYearAndWeekNumberAndStatusOrderByCreatedAtDesc(Long userId, int year, int weekNumber, PlanStatus status);
   List<WeekPlan> findByYearAndWeekNumberOrderByUserDisplayNameAscCreatedAtDesc(int year, int weekNumber);
   List<WeekPlan> findByProjectIdAndYearAndWeekNumberAndWeekday(Long projectId, int year, int weekNumber, PlanWeekday weekday);
