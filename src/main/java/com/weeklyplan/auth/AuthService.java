@@ -17,6 +17,9 @@ public class AuthService {
   public AuthResponse register(AuthRequest request) {
     String username = request.username().trim().toLowerCase(Locale.ROOT);
     if (users.existsByUsername(username)) throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
+    if (request.companyId() == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "注册时必须选择所属公司");
+    }
     Company company = companies.findById(request.companyId())
         .filter(item -> "ACTIVE".equals(item.getStatus()))
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "公司不存在或已停用"));
