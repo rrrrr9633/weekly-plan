@@ -70,23 +70,20 @@ public class WeekPlanService {
 
   @Transactional
   public WeekPlanResponse update(String userId, Long id, UpdateWeekPlanRequest request) {
-    WeekPlan plan = plans.findByIdAndUserId(id, parseId(userId))
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权修改"));
+    WeekPlan plan = requireManageablePlan(userId, id, "修改");
     plan.update(request.content().trim(), request.weekday());
     return toResponse(plan);
   }
 
   @Transactional
   public void delete(String userId, Long id) {
-    WeekPlan plan = plans.findByIdAndUserId(id, parseId(userId))
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权删除"));
+    WeekPlan plan = requireManageablePlan(userId, id, "删除");
     plans.delete(plan);
   }
 
   @Transactional
   public WeekPlanResponse archive(String userId, Long id) {
-    WeekPlan plan = plans.findByIdAndUserId(id, parseId(userId))
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权归档"));
+    WeekPlan plan = requireManageablePlan(userId, id, "归档");
     if (plan.getStatus() == PlanStatus.ARCHIVED) throw new ResponseStatusException(HttpStatus.CONFLICT, "计划已归档");
     plan.archive();
     return toResponse(plan);
@@ -148,7 +145,9 @@ public class WeekPlanService {
         String.valueOf(plan.getId()), String.valueOf(plan.getProject().getId()), plan.getProject().getName(), plan.getProject().getCode(),
         String.valueOf(plan.getUser().getId()), plan.getUser().getUsername(), displayNameOf(plan.getUser()), plan.getYear(), plan.getWeekNumber(),
         plan.getWeekday().name().toLowerCase(Locale.ROOT), weekStart, weekStart.plusDays(6), plan.getContent(),
-        plan.getAssignedBy() == null ? null : plan.getAssignedBy().getDisplayName(), plan.getAssignedBy() != null,
+        plan.getAssignedBy() == null ? null : plan.getAssignedBy().getDisplayName(),
+        plan.getAssignedBy() == null ? null : String.valueOf(plan.getAssignedBy().getId()),
+        plan.getAssignedBy() != null,
         plan.getStatus().name().toLowerCase(Locale.ROOT), plan.getArchivedAt(),
         plan.getBoardPosition() == null ? null : plan.getBoardPosition().longValue(), plan.getCreatedAt(), plan.getUpdatedAt());
   }
@@ -181,6 +180,19 @@ public class WeekPlanService {
     if (project.getStatus() != ProjectStatus.ACTIVE) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "项目已停用，不能创建计划");
     return project;
   }
+  private WeekPlan requireManageablePlan(String userId, Long planId, String action) {
+    AppUser actor = requireUser(parseId(userId));
+    WeekPlan plan = plans.findById(planId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在"));
+    tenant.assertCompany(plan.getProject().getCompany());
+    boolean isOwner = plan.getUser().getId().equals(actor.getId());
+    boolean isAssigner = plan.getAssignedBy() != null && plan.getAssignedBy().getId().equals(actor.getId());
+    if (!isOwner && !isAssigner) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权" + action);
+    }
+    return plan;
+  }
+
   private AppUser requireUser(Long id) {
     return users.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
   }
