@@ -33,7 +33,7 @@ public class SecurityConfig {
       .addFilterBefore(jwt, UsernamePasswordAuthenticationFilter.class).build();
   }
   @Bean CorsFilter corsFilter() {
-    CorsConfiguration config = new CorsConfiguration(); config.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173", "https://tianxiadiyi.xyz")); config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+    CorsConfiguration config = new CorsConfiguration(); config.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173", "https://tianxiadiyi.xyz")); config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Company-Id"));
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource(); source.registerCorsConfiguration("/**", config); return new CorsFilter(source);
   }
 }
