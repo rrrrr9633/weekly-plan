@@ -30,7 +30,7 @@ public class WeekPlanService {
 
   @Transactional(readOnly = true)
   public List<WeekPlanResponse> listMine(String userId, int year, int week) {
-    return plans.findByUserIdAndYearAndWeekNumberAndStatusOrderByCreatedAtDesc(parseId(userId), year, week, PlanStatus.ACTIVE).stream()
+    return plans.findParticipatingByUserAndWeekAndStatus(parseId(userId), year, week, PlanStatus.ACTIVE).stream()
         .sorted(this::compareByWeekdayThenCreatedAt).map(this::toResponse).toList();
   }
 
@@ -44,7 +44,7 @@ public class WeekPlanService {
 
   @Transactional(readOnly = true)
   public List<WeekPlanResponse> listArchived(String userId) {
-    return plans.findByUserIdAndStatusOrderByArchivedAtDesc(parseId(userId), PlanStatus.ARCHIVED).stream().map(this::toResponse).toList();
+    return plans.findParticipatingByUserAndStatus(parseId(userId), PlanStatus.ARCHIVED).stream().map(this::toResponse).toList();
   }
 
   @Transactional
@@ -91,9 +91,7 @@ public class WeekPlanService {
 
   @Transactional
   public WeekPlanResponse restore(String userId, Long id) {
-    WeekPlan plan = plans.findByIdAndUserId(id, parseId(userId))
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权恢复"));
-    if (plan.getAssignedBy() != null) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "管理员分配的计划不可由个人恢复");
+    WeekPlan plan = requireManageablePlan(userId, id, "恢复");
     if (plan.getStatus() != PlanStatus.ARCHIVED) throw new ResponseStatusException(HttpStatus.CONFLICT, "计划未归档");
     plan.restore();
     return toResponse(plan);
@@ -137,6 +135,24 @@ public class WeekPlanService {
         project, user, admin, request.year(), request.weekNumber(), request.weekday(), request.content().trim())));
   }
 
+  @Transactional
+  public WeekPlanResponse claim(String userId, Long id) {
+    AppUser actor = requireUser(parseId(userId));
+    WeekPlan plan = requirePlanInCurrentCompany(id);
+    if (plan.getStatus() != PlanStatus.ACTIVE) throw new ResponseStatusException(HttpStatus.CONFLICT, "已归档计划不能认领");
+    plan.addParticipant(actor);
+    return toResponse(plan);
+  }
+
+  @Transactional
+  public void leave(String userId, Long id) {
+    AppUser actor = requireUser(parseId(userId));
+    WeekPlan plan = requirePlanInCurrentCompany(id);
+    if (plan.getUser().getId().equals(actor.getId())) throw new ResponseStatusException(HttpStatus.CONFLICT, "负责人不能退出当前计划");
+    if (!plan.hasParticipant(actor.getId())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "尚未认领该计划");
+    plan.removeParticipant(actor.getId());
+  }
+
   private WeekPlanResponse toResponse(WeekPlan plan) {
     LocalDate weekStart = LocalDate.of(plan.getYear(), 1, 4)
         .with(WeekFields.ISO.weekOfWeekBasedYear(), plan.getWeekNumber())
@@ -149,7 +165,11 @@ public class WeekPlanService {
         plan.getAssignedBy() == null ? null : String.valueOf(plan.getAssignedBy().getId()),
         plan.getAssignedBy() != null,
         plan.getStatus().name().toLowerCase(Locale.ROOT), plan.getArchivedAt(),
-        plan.getBoardPosition() == null ? null : plan.getBoardPosition().longValue(), plan.getCreatedAt(), plan.getUpdatedAt());
+        plan.getBoardPosition() == null ? null : plan.getBoardPosition().longValue(),
+        plan.getParticipants().stream().map(participant -> new PlanParticipantResponse(
+            String.valueOf(participant.getUser().getId()), displayNameOf(participant.getUser()), participant.getUser().getId().equals(plan.getUser().getId())
+        )).toList(),
+        plan.getCreatedAt(), plan.getUpdatedAt());
   }
 
   private String displayNameOf(AppUser user) {
@@ -182,14 +202,17 @@ public class WeekPlanService {
   }
   private WeekPlan requireManageablePlan(String userId, Long planId, String action) {
     AppUser actor = requireUser(parseId(userId));
+    WeekPlan plan = requirePlanInCurrentCompany(planId);
+    if (!plan.hasParticipant(actor.getId())) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权" + action);
+    }
+    return plan;
+  }
+
+  private WeekPlan requirePlanInCurrentCompany(Long planId) {
     WeekPlan plan = plans.findById(planId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在"));
     tenant.assertCompany(plan.getProject().getCompany());
-    boolean isOwner = plan.getUser().getId().equals(actor.getId());
-    boolean isAssigner = plan.getAssignedBy() != null && plan.getAssignedBy().getId().equals(actor.getId());
-    if (!isOwner && !isAssigner) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权" + action);
-    }
     return plan;
   }
 

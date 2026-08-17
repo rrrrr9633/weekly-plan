@@ -34,7 +34,7 @@ public class WeekPlanReportService {
 
   @Transactional(readOnly = true)
   public byte[] exportMine(Long userId, int year, int weekNumber) {
-    List<WeekPlan> weekPlans = plans.findByUserIdAndYearAndWeekNumberOrderByCreatedAtAsc(userId, year, weekNumber).stream()
+    List<WeekPlan> weekPlans = plans.findParticipatingByUserAndWeekAndStatus(userId, year, weekNumber, PlanStatus.ACTIVE).stream()
         .sorted((left, right) -> Integer.compare(weekdayRank(left.getWeekday()), weekdayRank(right.getWeekday())))
         .toList();
 

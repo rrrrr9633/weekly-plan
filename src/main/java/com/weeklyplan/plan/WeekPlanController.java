@@ -72,6 +72,16 @@ public class WeekPlanController {
     return plans.createBatch(authentication.getName(), request);
   }
 
+  @PostMapping("/{id}/claim")
+  public WeekPlanResponse claim(Authentication authentication, @PathVariable Long id) {
+    return plans.claim(authentication.getName(), id);
+  }
+
+  @DeleteMapping("/{id}/claim") @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void leave(Authentication authentication, @PathVariable Long id) {
+    plans.leave(authentication.getName(), id);
+  }
+
   @PutMapping("/{id}")
   public WeekPlanResponse update(Authentication authentication, @PathVariable Long id, @Valid @RequestBody UpdateWeekPlanRequest request) {
     return plans.update(authentication.getName(), id, request);
