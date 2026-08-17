@@ -1,6 +1,8 @@
 package com.weeklyplan.user;
 
 import com.weeklyplan.auth.UserResponse;
+import com.weeklyplan.company.Company;
+import com.weeklyplan.company.CompanyRepository;
 import com.weeklyplan.plan.WeekPlanRepository;
 import com.weeklyplan.tenant.TenantAccessService;
 import org.springframework.http.HttpStatus;
@@ -12,8 +14,8 @@ import java.util.Locale;
 
 @Service
 public class UserService {
-  private final UserRepository users; private final RoleRepository roles; private final PasswordEncoder passwords; private final WeekPlanRepository plans; private final TenantAccessService tenant;
-  public UserService(UserRepository users, RoleRepository roles, PasswordEncoder passwords, WeekPlanRepository plans, TenantAccessService tenant) { this.users = users; this.roles = roles; this.passwords = passwords; this.plans = plans; this.tenant = tenant; }
+  private final UserRepository users; private final RoleRepository roles; private final CompanyRepository companies; private final PasswordEncoder passwords; private final WeekPlanRepository plans; private final TenantAccessService tenant;
+  public UserService(UserRepository users, RoleRepository roles, CompanyRepository companies, PasswordEncoder passwords, WeekPlanRepository plans, TenantAccessService tenant) { this.users = users; this.roles = roles; this.companies = companies; this.passwords = passwords; this.plans = plans; this.tenant = tenant; }
   public List<UserResponse> list() {
     List<AppUser> result = tenant.isSuperAdmin() ? users.findAll() : users.findByCompanyId(tenant.currentCompany().getId());
     return result.stream().map(UserResponse::of).toList();
@@ -35,6 +37,21 @@ public class UserService {
     user.update(username, request.username().trim(), resolveRole(request.role()));
     users.save(user);
     return UserResponse.of(user);
+  }
+
+  public UserResponse moveToCompany(Long id, MoveUserCompanyRequest request, String currentUserId) {
+    if (!tenant.isSuperAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅超级管理员可调整用户所属公司");
+    if (id.equals(parseId(currentUserId))) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能调整当前登录超级管理员的公司归属");
+    AppUser user = requireUser(id);
+    if ("SUPER_ADMIN".equals(user.getRole().getCode())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能调整超级管理员的公司归属");
+    if (plans.existsByUserId(id) || plans.existsByAssignedById(id)) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "该用户已有计划记录，不能直接切换公司");
+    }
+    Company company = companies.findById(request.companyId())
+        .filter(item -> "ACTIVE".equals(item.getStatus()))
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "公司不存在或已停用"));
+    user.setCompany(company);
+    return UserResponse.of(users.save(user));
   }
 
   public UserResponse getMyProfile(String currentUserId) {
