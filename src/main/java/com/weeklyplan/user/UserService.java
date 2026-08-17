@@ -17,8 +17,7 @@ public class UserService {
   private final UserRepository users; private final RoleRepository roles; private final CompanyRepository companies; private final PasswordEncoder passwords; private final WeekPlanRepository plans; private final TenantAccessService tenant;
   public UserService(UserRepository users, RoleRepository roles, CompanyRepository companies, PasswordEncoder passwords, WeekPlanRepository plans, TenantAccessService tenant) { this.users = users; this.roles = roles; this.companies = companies; this.passwords = passwords; this.plans = plans; this.tenant = tenant; }
   public List<UserResponse> list() {
-    List<AppUser> result = tenant.isSuperAdmin() ? users.findAll() : users.findByCompanyId(tenant.currentCompany().getId());
-    return result.stream().map(UserResponse::of).toList();
+    return users.findByCompanyId(tenant.currentCompany().getId()).stream().map(UserResponse::of).toList();
   }
   public UserResponse create(CreateUserRequest request) {
     String username = request.username().trim().toLowerCase(Locale.ROOT);

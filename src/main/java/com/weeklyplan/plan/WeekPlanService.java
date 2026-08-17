@@ -72,7 +72,6 @@ public class WeekPlanService {
   public WeekPlanResponse update(String userId, Long id, UpdateWeekPlanRequest request) {
     WeekPlan plan = plans.findByIdAndUserId(id, parseId(userId))
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权修改"));
-    if (plan.getAssignedBy() != null) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "管理员分配的计划不可由个人修改");
     plan.update(request.content().trim(), request.weekday());
     return toResponse(plan);
   }
@@ -81,7 +80,6 @@ public class WeekPlanService {
   public void delete(String userId, Long id) {
     WeekPlan plan = plans.findByIdAndUserId(id, parseId(userId))
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权删除"));
-    if (plan.getAssignedBy() != null) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "管理员分配的计划不可由个人删除");
     plans.delete(plan);
   }
 
@@ -89,7 +87,6 @@ public class WeekPlanService {
   public WeekPlanResponse archive(String userId, Long id) {
     WeekPlan plan = plans.findByIdAndUserId(id, parseId(userId))
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权归档"));
-    if (plan.getAssignedBy() != null) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "管理员分配的计划不可由个人归档");
     if (plan.getStatus() == PlanStatus.ARCHIVED) throw new ResponseStatusException(HttpStatus.CONFLICT, "计划已归档");
     plan.archive();
     return toResponse(plan);
