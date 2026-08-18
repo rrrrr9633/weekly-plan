@@ -71,7 +71,7 @@ public class WeekPlanService {
   @Transactional
   public WeekPlanResponse update(String userId, Long id, UpdateWeekPlanRequest request) {
     WeekPlan plan = requireManageablePlan(userId, id, "修改");
-    plan.update(request.content().trim(), request.weekday());
+    plan.update(requireActiveProject(request.projectId()), request.content().trim(), request.weekday());
     return toResponse(plan);
   }
 

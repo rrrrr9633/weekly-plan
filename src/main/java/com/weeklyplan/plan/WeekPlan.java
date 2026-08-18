@@ -51,7 +51,14 @@ public class WeekPlan {
     return plan;
   }
 
-  public void update(String content, PlanWeekday weekday) { this.content = content; this.weekday = weekday; this.updatedAt = Instant.now(); }
+  public void update(Project project, String content, PlanWeekday weekday) {
+    boolean projectChanged = !this.project.getId().equals(project.getId());
+    this.project = project;
+    this.content = content;
+    this.weekday = weekday;
+    if (projectChanged) this.boardPosition = null;
+    this.updatedAt = Instant.now();
+  }
   public void archive() { this.status = PlanStatus.ARCHIVED; this.archivedAt = Instant.now(); this.updatedAt = Instant.now(); }
   public void restore() { this.status = PlanStatus.ACTIVE; this.archivedAt = null; this.updatedAt = Instant.now(); }
   public void setBoardPosition(Integer boardPosition) { this.boardPosition = boardPosition; this.updatedAt = Instant.now(); }
