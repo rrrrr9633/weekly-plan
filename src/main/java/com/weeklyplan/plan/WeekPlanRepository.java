@@ -20,6 +20,8 @@ public interface WeekPlanRepository extends JpaRepository<WeekPlan, Long> {
   List<WeekPlan> findParticipatingByUserAndWeekAndStatus(@Param("userId") Long userId, @Param("year") int year, @Param("week") int week, @Param("status") PlanStatus status);
   @Query("select distinct p from WeekPlan p join p.participants participant where participant.user.id = :userId and p.status = :status order by p.archivedAt desc")
   List<WeekPlan> findParticipatingByUserAndStatus(@Param("userId") Long userId, @Param("status") PlanStatus status);
+  @Query("select distinct p from WeekPlan p join p.participants participant where participant.user.id = :userId order by p.year desc, p.weekNumber desc, p.createdAt desc")
+  List<WeekPlan> findAllParticipatingByUser(@Param("userId") Long userId);
   Optional<WeekPlan> findByIdAndUserId(Long id, Long userId);
   boolean existsByUserId(Long userId);
   boolean existsByAssignedById(Long userId);

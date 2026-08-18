@@ -26,31 +26,18 @@ public class AiOperationService {
   public AiDtos.ProposalResponse propose(String message) {
     AppUser user = tenant.currentUser(); List<Map<String, Object>> candidates = projectCandidates();
     LocalDate today = LocalDate.now(); WeekFields iso = WeekFields.ISO;
-    if (isConflictCheck(message)) return conflictCheck(user, message, today);
-    AiDtos.ModelProposal model = client.propose(message, candidates, today.get(iso.weekBasedYear()), today.get(iso.weekOfWeekBasedYear()));
+    AiDtos.ModelProposal model = client.propose(message, candidates, chatProjectContext(), chatPlanContext(user), today.get(iso.weekBasedYear()), today.get(iso.weekOfWeekBasedYear()));
     AiOperationType type = parseType(model.operationType()); JsonNode payload = model.payload();
+    // 只读诉求统一由模型根据受控上下文回答，禁止返回服务端的机械查询统计。
+    if (type == AiOperationType.QUERY) { type = AiOperationType.CHAT; payload = mapper.createObjectNode(); }
     if (payload == null || !payload.isObject() || containsForbiddenField(payload)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "AI 提案包含不允许的身份或租户字段");
     ObjectNode completed = ((ObjectNode) payload).deepCopy();
     if (type == AiOperationType.PLAN_CREATE) { normalizePlanCreatePayload(completed); applyScheduleDefaults(completed, message, today); }
     Object missing = completePayload(type, completed, user);
     AiOperationProposal proposal = proposals.save(AiOperationProposal.create(tenant.currentCompany(), user, type, json(completed), preview(type, completed, model.preview())));
     if (type == AiOperationType.QUERY) proposal.completeReadOnly(json(missing == null ? query(completed) : Map.of("missingFields", missing, "readOnly", true)));
+    if (type == AiOperationType.CHAT) proposal.completeReadOnly(json(Map.of("answer", proposal.getPreview())));
     return response(proposal, missing);
-  }
-  private boolean isConflictCheck(String message) {
-    String text = message.replaceAll("\\s+", "");
-    return text.contains("冲突") && (text.contains("计划") || text.contains("安排"));
-  }
-  private AiDtos.ProposalResponse conflictCheck(AppUser user, String message, LocalDate today) {
-    LocalDate date = resolveRequestedDate(message, today); WeekFields iso = WeekFields.ISO;
-    int year = date.get(iso.weekBasedYear()); int week = date.get(iso.weekOfWeekBasedYear());
-    List<WeekPlan> activePlans = planRepository.findParticipatingByUserAndWeekAndStatus(user.getId(), year, week, PlanStatus.ACTIVE);
-    Map<PlanWeekday, Long> perDay = activePlans.stream().filter(plan -> plan.getWeekday() != PlanWeekday.PENDING).collect(java.util.stream.Collectors.groupingBy(WeekPlan::getWeekday, java.util.stream.Collectors.counting()));
-    List<String> conflictDays = perDay.entrySet().stream().filter(entry -> entry.getValue() > 1).map(entry -> weekdayLabel(entry.getKey().name()) + "（" + entry.getValue() + " 项）").sorted().toList();
-    ObjectNode payload = mapper.createObjectNode().put("resource", "plans").put("queryKind", "CONFLICT_CHECK").put("year", year).put("weekNumber", week);
-    AiOperationProposal proposal = proposals.save(AiOperationProposal.create(tenant.currentCompany(), user, AiOperationType.QUERY, json(payload), "检查 ISO " + year + " 年第 " + week + " 周的个人计划冲突"));
-    proposal.completeReadOnly(json(Map.of("conflictCount", conflictDays.size(), "conflictDays", conflictDays, "year", year, "weekNumber", week)));
-    return response(proposal, null);
   }
   @Transactional(readOnly = true)
   public Map<String, Object> context() { return Map.of("projects", projectCandidates()); }
@@ -81,13 +68,21 @@ public class AiOperationService {
   }
   private Set<String> editableFields(AiOperationType type) {
     return switch (type) {
-      case PLAN_CREATE -> Set.of("projectId", "content", "year", "weekNumber", "weekday");
+      case PLAN_CREATE -> Set.of("projectId", "content", "weekday");
       case PLAN_UPDATE, PLAN_DELETE, PROJECT_UPDATE, PROJECT_DELETE -> Set.of("id");
       case PROJECT_CREATE -> Set.of("name", "code", "assistOrg", "description");
       case QUERY -> Set.of("resource");
+      case CHAT -> Set.of();
     };
   }
   private Object completePayload(AiOperationType type, ObjectNode p, AppUser user) {
+    if (type == AiOperationType.PLAN_CREATE) {
+      WeekFields iso = WeekFields.ISO;
+      LocalDate today = LocalDate.now();
+      // 周数是系统上下文，不是用户补充字段；旧提案缺失时也统一落到当前周。
+      fill(p, "year", today.get(iso.weekBasedYear()));
+      fill(p, "weekNumber", today.get(iso.weekOfWeekBasedYear()));
+    }
     if (type == AiOperationType.PLAN_UPDATE && p.hasNonNull("id")) { WeekPlan plan = ownedPlan(p.path("id").asLong(), user); fill(p, "projectId", plan.getProject().getId()); fill(p, "content", plan.getContent()); fill(p, "weekday", plan.getWeekday().name()); }
     if (type == AiOperationType.PROJECT_UPDATE && p.hasNonNull("id")) { Project project = currentProject(p.path("id").asLong()); fill(p, "name", project.getName()); fill(p, "description", project.getDescription()); fill(p, "assistOrg", project.getAssistOrg()); fill(p, "status", project.getStatus().name()); fill(p, "hidden", project.isHidden()); }
     ArrayList<String> fields = new ArrayList<>();
@@ -106,6 +101,7 @@ public class AiOperationService {
       case PROJECT_UPDATE -> projectService.aiUpdate(requiredId(p), new UpdateProjectRequest(nullable(p,"name"), nullable(p,"description"), nullable(p,"assistOrg"), nullable(p,"status"), p.has("hidden") ? p.get("hidden").asBoolean() : null));
       case PROJECT_DELETE -> { projectService.aiDelete(requiredId(p)); yield Map.of("deleted", true); }
       case QUERY -> query(p);
+      case CHAT -> Map.of("answer", p.path("answer").asText(""));
     };
   }
   private Object query(JsonNode p) {
@@ -116,6 +112,18 @@ public class AiOperationService {
   private WeekPlan ownedPlan(long id, AppUser user) { WeekPlan plan = planRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在")); tenant.assertCompany(plan.getProject().getCompany()); if (!plan.getUser().getId().equals(user.getId())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权操作"); return plan; }
   private Project currentProject(long id) { Project project = projects.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "项目不存在")); tenant.assertCompany(project.getCompany()); return project; }
   private List<Map<String, Object>> projectCandidates() { return projects.findByCompanyId(tenant.currentCompany().getId()).stream().map(x -> Map.of("id", (Object)x.getId(), "code", (Object)x.getCode(), "name", (Object)x.getName())).toList(); }
+  private List<Map<String, Object>> chatProjectContext() {
+    return (tenant.isSuperAdmin() ? projects.findAll() : projects.findByCompanyId(tenant.currentCompany().getId())).stream()
+      .map(project -> Map.of("code", (Object) project.getCode(), "name", (Object) project.getName(), "assistOrg", (Object) (project.getAssistOrg() == null ? "" : project.getAssistOrg()), "status", (Object) project.getStatus().name()))
+      .toList();
+  }
+  private List<Map<String, Object>> chatPlanContext(AppUser user) {
+    List<WeekPlan> readablePlans = tenant.isSuperAdmin() ? planRepository.findAll() : planRepository.findAllParticipatingByUser(user.getId());
+    return readablePlans.stream().map(plan -> Map.of(
+      "year", (Object) plan.getYear(), "weekNumber", (Object) plan.getWeekNumber(), "weekday", (Object) weekdayLabel(plan.getWeekday().name()),
+      "content", (Object) plan.getContent(), "project", (Object) plan.getProject().getName(), "owner", (Object) plan.getUser().getDisplayName(), "status", (Object) plan.getStatus().name()
+    )).toList();
+  }
   private Object targetHints(AiOperationType type, AppUser user) { if (type != AiOperationType.PLAN_UPDATE && type != AiOperationType.PLAN_DELETE) return List.of(); return planRepository.findAll().stream().filter(x -> x.getProject().getCompany().getId().equals(tenant.currentCompany().getId()) && x.getUser().getId().equals(user.getId())).map(x -> Map.of("id",x.getId(),"content",x.getContent(),"project",x.getProject().getName(),"weekday",x.getWeekday().name())).toList(); }
   private String preview(AiOperationType type, JsonNode p, String modelPreview) {
     if (type == AiOperationType.PLAN_CREATE) {
@@ -131,6 +139,7 @@ public class AiOperationService {
         if (p.hasNonNull(alias) && !p.path(alias).asText().isBlank()) { p.set("content", p.get(alias)); break; }
       }
     }
+    if (p.path("weekday").asText().equalsIgnoreCase("PENDING")) p.remove("weekday");
     if (p.path("weekday").canConvertToInt() && !p.path("weekday").isTextual()) {
       int day = p.path("weekday").asInt();
       if (day >= 1 && day <= 7) p.put("weekday", PlanWeekday.values()[day - 1].name());
@@ -146,9 +155,10 @@ public class AiOperationService {
       p.put("weekNumber", date.get(iso.weekOfWeekBasedYear()));
       p.put("weekday", weekday);
     } else {
-      fill(p, "year", date.get(iso.weekBasedYear()));
-      fill(p, "weekNumber", date.get(iso.weekOfWeekBasedYear()));
-      fill(p, "weekday", weekday);
+      // 未指定日期时，周数始终由系统固定为当前周，模型不得猜测或延续其他周。
+      p.put("year", today.get(iso.weekBasedYear()));
+      p.put("weekNumber", today.get(iso.weekOfWeekBasedYear()));
+      if (!weekday.equals("PENDING")) p.put("weekday", weekday);
     }
   }
   private LocalDate resolveRequestedDate(String message, LocalDate today) {
@@ -192,9 +202,15 @@ public class AiOperationService {
     if (missing != null) message = "请补充以下信息，然后生成可确认的操作。";
     else if (p != null && p.getStatus() == AiProposalStatus.PENDING) message = "已生成预览；确认后才会写入。";
     else if (p != null && p.getStatus() == AiProposalStatus.COMPLETED && p.getOperationType() == AiOperationType.QUERY) message = querySummary(p.getResultJson());
+    else if (p != null && p.getStatus() == AiProposalStatus.COMPLETED && p.getOperationType() == AiOperationType.CHAT) message = chatAnswer(p.getResultJson(), p.getPreview());
     else if (p != null && p.getStatus() == AiProposalStatus.COMPLETED) message = "操作已完成。";
     else message = error;
     return new AiDtos.ProposalResponse(p == null ? null : p.getId(), type.name(), p == null ? "NEEDS_INPUT" : p.getStatus().name(), preview, message, error, missing);
+  }
+  private String chatAnswer(String resultJson, String fallback) {
+    if (resultJson == null) return fallback == null ? "暂时无法生成回答。" : fallback;
+    String answer = tree(resultJson).path("answer").asText();
+    return answer.isBlank() ? (fallback == null ? "暂时无法生成回答。" : fallback) : answer;
   }
   private String querySummary(String resultJson) {
     if (resultJson == null) return "未找到结果。";
