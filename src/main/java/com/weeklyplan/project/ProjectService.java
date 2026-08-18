@@ -41,7 +41,7 @@ public class ProjectService {
   public ProjectResponse update(Long id, UpdateProjectRequest request) {
     ProjectStatus status = request.status() == null ? null : parseStatus(request.status());
     Project project = requireProject(id);
-    project.update(trimOrNull(request.name()), trimOrNull(request.description()), trimOrNull(request.assistOrg()), status);
+    project.update(trimOrNull(request.name()), trimOrNull(request.description()), trimOrNull(request.assistOrg()), status, request.hidden());
     return ProjectResponse.of(project);
   }
 

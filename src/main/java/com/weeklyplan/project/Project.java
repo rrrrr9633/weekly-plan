@@ -13,6 +13,7 @@ public class Project {
   private String description;
   @Column(name = "assist_org") private String assistOrg;
   @Enumerated(EnumType.STRING) @Column(nullable = false) private ProjectStatus status;
+  @Column(nullable = false) private boolean hidden;
   @ManyToOne(fetch = FetchType.EAGER) @JoinColumn(name = "company_id", nullable = false) private Company company;
   @Column(name = "created_at", nullable = false) private Instant createdAt;
   @Column(name = "updated_at", nullable = false) private Instant updatedAt;
@@ -23,6 +24,7 @@ public class Project {
   public String getDescription() { return description; }
   public String getAssistOrg() { return assistOrg; }
   public ProjectStatus getStatus() { return status; }
+  public boolean isHidden() { return hidden; }
   public Company getCompany() { return company; }
   public Instant getCreatedAt() { return createdAt; }
 
@@ -34,11 +36,12 @@ public class Project {
     return project;
   }
 
-  public void update(String name, String description, String assistOrg, ProjectStatus status) {
+  public void update(String name, String description, String assistOrg, ProjectStatus status, Boolean hidden) {
     if (name != null) this.name = name;
     if (description != null) this.description = description;
     if (assistOrg != null) this.assistOrg = assistOrg;
     if (status != null) this.status = status;
+    if (hidden != null) this.hidden = hidden;
     this.updatedAt = Instant.now();
   }
 }
