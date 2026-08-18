@@ -29,8 +29,13 @@ public class WeekPlanController {
   }
 
   @GetMapping("/my/{year}/{week}/report")
-  public ResponseEntity<byte[]> exportMyReport(Authentication authentication, @PathVariable int year, @PathVariable int week) {
-    byte[] report = reports.exportMine(Long.valueOf(authentication.getName()), year, week);
+  public ResponseEntity<byte[]> exportMyReport(
+      Authentication authentication,
+      @PathVariable int year,
+      @PathVariable int week,
+      @RequestParam(required = false) List<Long> projectIds
+  ) {
+    byte[] report = reports.exportMine(Long.valueOf(authentication.getName()), year, week, projectIds);
     String filename = year + "年第" + week + "周个人周报.xlsx";
     return ResponseEntity.ok()
         .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))

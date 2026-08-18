@@ -21,7 +21,7 @@ class WeekPlanReportServiceTest {
     when(repository.findParticipatingByUserAndWeek(7L, 2026, 32))
         .thenReturn(List.of(activePlan, archivedPlan));
 
-    byte[] report = new WeekPlanReportService(repository).exportMine(7L, 2026, 32);
+    byte[] report = new WeekPlanReportService(repository).exportMine(7L, 2026, 32, null);
 
     verify(repository).findParticipatingByUserAndWeek(7L, 2026, 32);
     try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(report))) {
@@ -29,6 +29,22 @@ class WeekPlanReportServiceTest {
       assertEquals("项目 / 进行中的计划 / 2026-08-03", sheet.getRow(4).getCell(2).getStringCellValue());
       assertEquals("项目 / 已归档的计划 / 2026-08-04", sheet.getRow(5).getCell(2).getStringCellValue());
       assertEquals("已完成", sheet.getRow(5).getCell(3).getStringCellValue());
+    }
+  }
+
+  @Test
+  void exportsOnlyPlansFromSelectedProjects() throws Exception {
+    WeekPlanRepository repository = mock(WeekPlanRepository.class);
+    WeekPlan selectedPlan = plan("指定项目计划", PlanStatus.ACTIVE, PlanWeekday.MONDAY);
+    when(repository.findParticipatingByUserAndWeekAndProjectIdIn(7L, 2026, 32, List.of(9L)))
+        .thenReturn(List.of(selectedPlan));
+
+    byte[] report = new WeekPlanReportService(repository).exportMine(7L, 2026, 32, List.of(9L));
+
+    verify(repository).findParticipatingByUserAndWeekAndProjectIdIn(7L, 2026, 32, List.of(9L));
+    try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(report))) {
+      var sheet = workbook.getSheetAt(0);
+      assertEquals("项目 / 指定项目计划 / 2026-08-03", sheet.getRow(4).getCell(2).getStringCellValue());
     }
   }
 

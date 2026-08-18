@@ -33,8 +33,12 @@ public class WeekPlanReportService {
   }
 
   @Transactional(readOnly = true)
-  public byte[] exportMine(Long userId, int year, int weekNumber) {
-    List<WeekPlan> weekPlans = plans.findParticipatingByUserAndWeek(userId, year, weekNumber).stream()
+  public byte[] exportMine(Long userId, int year, int weekNumber, List<Long> projectIds) {
+    List<WeekPlan> weekPlans = (projectIds == null
+        ? plans.findParticipatingByUserAndWeek(userId, year, weekNumber)
+        : projectIds.isEmpty()
+          ? List.<WeekPlan>of()
+          : plans.findParticipatingByUserAndWeekAndProjectIdIn(userId, year, weekNumber, projectIds)).stream()
         .sorted((left, right) -> Integer.compare(weekdayRank(left.getWeekday()), weekdayRank(right.getWeekday())))
         .toList();
 
