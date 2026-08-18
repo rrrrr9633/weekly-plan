@@ -33,7 +33,8 @@ public class UserService {
     AppUser user = requireManagedUser(id);
     String username = request.username().trim().toLowerCase(Locale.ROOT);
     if (users.existsByUsernameAndIdNot(username, id)) throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
-    user.update(username, request.username().trim(), resolveRole(request.role()));
+    String displayName = request.displayName().trim();
+    user.update(username, displayName, resolveRole(request.role()));
     users.save(user);
     return UserResponse.of(user);
   }

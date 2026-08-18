@@ -203,7 +203,7 @@ public class WeekPlanService {
   private WeekPlan requireManageablePlan(String userId, Long planId, String action) {
     AppUser actor = requireUser(parseId(userId));
     WeekPlan plan = requirePlanInCurrentCompany(planId);
-    if (!plan.hasParticipant(actor.getId())) {
+    if (!tenant.isSuperAdmin() && !plan.hasParticipant(actor.getId())) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权" + action);
     }
     return plan;
