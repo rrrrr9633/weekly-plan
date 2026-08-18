@@ -13,5 +13,6 @@ public class AiOperationController {
   @PostMapping("/proposals") public AiDtos.ProposalResponse propose(@Valid @RequestBody AiDtos.ConversationRequest request) { return service.propose(request.message()); }
   @GetMapping("/context") public Map<String, Object> context() { return service.context(); }
   @PostMapping("/proposals/{id}/confirm") public AiDtos.ProposalResponse confirm(@PathVariable Long id) { return service.confirm(id); }
+  @PostMapping("/proposals/{id}/supplement") public AiDtos.ProposalResponse supplement(@PathVariable Long id, @RequestBody AiDtos.SupplementRequest request) { return service.supplement(id, request); }
   @GetMapping("/operations") public List<AiDtos.ProposalResponse> history() { return service.history(); }
 }

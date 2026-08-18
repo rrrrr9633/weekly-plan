@@ -26,18 +26,31 @@ public class AiOperationService {
   public AiDtos.ProposalResponse propose(String message) {
     AppUser user = tenant.currentUser(); List<Map<String, Object>> candidates = projectCandidates();
     LocalDate today = LocalDate.now(); WeekFields iso = WeekFields.ISO;
+    if (isConflictCheck(message)) return conflictCheck(user, message, today);
     AiDtos.ModelProposal model = client.propose(message, candidates, today.get(iso.weekBasedYear()), today.get(iso.weekOfWeekBasedYear()));
     AiOperationType type = parseType(model.operationType()); JsonNode payload = model.payload();
     if (payload == null || !payload.isObject() || containsForbiddenField(payload)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "AI 提案包含不允许的身份或租户字段");
     ObjectNode completed = ((ObjectNode) payload).deepCopy();
     if (type == AiOperationType.PLAN_CREATE) { normalizePlanCreatePayload(completed); applyScheduleDefaults(completed, message, today); }
     Object missing = completePayload(type, completed, user);
-    if (missing != null && type != AiOperationType.QUERY) {
-      return response(null, type, completed, preview(type, completed, model.preview()), missing, null);
-    }
     AiOperationProposal proposal = proposals.save(AiOperationProposal.create(tenant.currentCompany(), user, type, json(completed), preview(type, completed, model.preview())));
     if (type == AiOperationType.QUERY) proposal.completeReadOnly(json(missing == null ? query(completed) : Map.of("missingFields", missing, "readOnly", true)));
     return response(proposal, missing);
+  }
+  private boolean isConflictCheck(String message) {
+    String text = message.replaceAll("\\s+", "");
+    return text.contains("冲突") && (text.contains("计划") || text.contains("安排"));
+  }
+  private AiDtos.ProposalResponse conflictCheck(AppUser user, String message, LocalDate today) {
+    LocalDate date = resolveRequestedDate(message, today); WeekFields iso = WeekFields.ISO;
+    int year = date.get(iso.weekBasedYear()); int week = date.get(iso.weekOfWeekBasedYear());
+    List<WeekPlan> activePlans = planRepository.findParticipatingByUserAndWeekAndStatus(user.getId(), year, week, PlanStatus.ACTIVE);
+    Map<PlanWeekday, Long> perDay = activePlans.stream().filter(plan -> plan.getWeekday() != PlanWeekday.PENDING).collect(java.util.stream.Collectors.groupingBy(WeekPlan::getWeekday, java.util.stream.Collectors.counting()));
+    List<String> conflictDays = perDay.entrySet().stream().filter(entry -> entry.getValue() > 1).map(entry -> weekdayLabel(entry.getKey().name()) + "（" + entry.getValue() + " 项）").sorted().toList();
+    ObjectNode payload = mapper.createObjectNode().put("resource", "plans").put("queryKind", "CONFLICT_CHECK").put("year", year).put("weekNumber", week);
+    AiOperationProposal proposal = proposals.save(AiOperationProposal.create(tenant.currentCompany(), user, AiOperationType.QUERY, json(payload), "检查 ISO " + year + " 年第 " + week + " 周的个人计划冲突"));
+    proposal.completeReadOnly(json(Map.of("conflictCount", conflictDays.size(), "conflictDays", conflictDays, "year", year, "weekNumber", week)));
+    return response(proposal, null);
   }
   @Transactional(readOnly = true)
   public Map<String, Object> context() { return Map.of("projects", projectCandidates()); }
@@ -51,6 +64,28 @@ public class AiOperationService {
     if (missing != null) return response(proposal, missing);
     proposal.confirm(); try { proposal.complete(json(execute(proposal.getOperationType(), payload))); } catch (ResponseStatusException error) { proposal.fail(error.getReason()); throw error; }
     return response(proposal, null);
+  }
+  @Transactional
+  public AiDtos.ProposalResponse supplement(Long id, AiDtos.SupplementRequest request) {
+    AppUser user = tenant.currentUser(); AiOperationProposal proposal = proposals.findByIdAndRequestedById(id, user.getId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "AI 提案不存在")); tenant.assertCompany(proposal.getCompany());
+    if (proposal.getStatus() != AiProposalStatus.PENDING) return response(proposal, null);
+    ObjectNode payload = (ObjectNode) tree(proposal.getPayload());
+    Map<String, String> fields = request.fields() == null ? Map.of() : request.fields();
+    for (String name : editableFields(proposal.getOperationType())) {
+      String value = fields.get(name);
+      if (value != null && !value.isBlank()) payload.put(name, value.trim());
+    }
+    Object missing = completePayload(proposal.getOperationType(), payload, user);
+    proposal.updateDraft(json(payload), preview(proposal.getOperationType(), payload, proposal.getPreview()));
+    return response(proposal, missing);
+  }
+  private Set<String> editableFields(AiOperationType type) {
+    return switch (type) {
+      case PLAN_CREATE -> Set.of("projectId", "content", "year", "weekNumber", "weekday");
+      case PLAN_UPDATE, PLAN_DELETE, PROJECT_UPDATE, PROJECT_DELETE -> Set.of("id");
+      case PROJECT_CREATE -> Set.of("name", "code", "assistOrg", "description");
+      case QUERY -> Set.of("resource");
+    };
   }
   private Object completePayload(AiOperationType type, ObjectNode p, AppUser user) {
     if (type == AiOperationType.PLAN_UPDATE && p.hasNonNull("id")) { WeekPlan plan = ownedPlan(p.path("id").asLong(), user); fill(p, "projectId", plan.getProject().getId()); fill(p, "content", plan.getContent()); fill(p, "weekday", plan.getWeekday().name()); }
@@ -164,6 +199,12 @@ public class AiOperationService {
   private String querySummary(String resultJson) {
     if (resultJson == null) return "未找到结果。";
     JsonNode result = tree(resultJson);
+    if (result.has("conflictCount")) {
+      int count = result.path("conflictCount").asInt();
+      if (count == 0) return "本周没有发现同一天安排多项计划的冲突。";
+      List<String> days = new ArrayList<>(); result.path("conflictDays").forEach(day -> days.add(day.asText()));
+      return "发现 " + count + " 个安排冲突：" + String.join("、", days) + "。";
+    }
     if (result.isArray()) return result.isEmpty() ? "未找到结果。" : "已找到 " + result.size() + " 条结果。";
     if (result.has("missingFields")) return "请补充必要信息后再查询。";
     return "查询已完成。";

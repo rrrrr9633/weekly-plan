@@ -30,6 +30,7 @@ public class AiOperationProposal {
     AiOperationProposal proposal = new AiOperationProposal(); proposal.company = company; proposal.requestedBy = user; proposal.operationType = type;
     proposal.status = AiProposalStatus.PENDING; proposal.payload = payload; proposal.preview = preview; proposal.createdAt = Instant.now(); return proposal;
   }
+  public void updateDraft(String nextPayload, String nextPreview) { payload = nextPayload; preview = nextPreview; errorMessage = null; }
   public void confirm() { status = AiProposalStatus.EXECUTING; confirmedAt = Instant.now(); }
   public void completeReadOnly(String result) { status = AiProposalStatus.COMPLETED; resultJson = result; executedAt = Instant.now(); }
   public void complete(String result) { status = AiProposalStatus.COMPLETED; resultJson = result; executedAt = Instant.now(); }
