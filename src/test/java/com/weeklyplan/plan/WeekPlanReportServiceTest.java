@@ -14,10 +14,10 @@ import static org.mockito.Mockito.when;
 
 class WeekPlanReportServiceTest {
   @Test
-  void exportsArchivedPlansAlongsideActivePlans() throws Exception {
+  void exportsArchivedAndHiddenProjectPlansAlongsideActivePlans() throws Exception {
     WeekPlanRepository repository = mock(WeekPlanRepository.class);
-    WeekPlan activePlan = plan("进行中的计划", PlanStatus.ACTIVE, PlanWeekday.MONDAY);
-    WeekPlan archivedPlan = plan("已归档的计划", PlanStatus.ARCHIVED, PlanWeekday.TUESDAY);
+    WeekPlan activePlan = plan("进行中的计划", PlanStatus.ACTIVE, PlanWeekday.MONDAY, false);
+    WeekPlan archivedPlan = plan("已归档的隐藏项目计划", PlanStatus.ARCHIVED, PlanWeekday.TUESDAY, true);
     when(repository.findParticipatingByUserAndWeek(7L, 2026, 32))
         .thenReturn(List.of(activePlan, archivedPlan));
 
@@ -27,7 +27,7 @@ class WeekPlanReportServiceTest {
     try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(report))) {
       var sheet = workbook.getSheetAt(0);
       assertEquals("项目 / 进行中的计划 / 2026-08-03", sheet.getRow(4).getCell(2).getStringCellValue());
-      assertEquals("项目 / 已归档的计划 / 2026-08-04", sheet.getRow(5).getCell(2).getStringCellValue());
+      assertEquals("项目 / 已归档的隐藏项目计划 / 2026-08-04", sheet.getRow(5).getCell(2).getStringCellValue());
       assertEquals("已完成", sheet.getRow(5).getCell(3).getStringCellValue());
     }
   }
@@ -49,8 +49,13 @@ class WeekPlanReportServiceTest {
   }
 
   private WeekPlan plan(String content, PlanStatus status, PlanWeekday weekday) {
+    return plan(content, status, weekday, false);
+  }
+
+  private WeekPlan plan(String content, PlanStatus status, PlanWeekday weekday, boolean hiddenProject) {
     Project project = mock(Project.class);
     when(project.getName()).thenReturn("项目");
+    when(project.isHidden()).thenReturn(hiddenProject);
     WeekPlan plan = mock(WeekPlan.class);
     when(plan.getProject()).thenReturn(project);
     when(plan.getContent()).thenReturn(content);

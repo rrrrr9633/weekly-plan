@@ -32,7 +32,8 @@ public class Project {
     Project project = new Project();
     project.company = company;
     project.name = name; project.code = code; project.description = description; project.assistOrg = assistOrg;
-    project.status = ProjectStatus.ACTIVE; project.createdAt = Instant.now(); project.updatedAt = Instant.now();
+    project.status = ProjectStatus.ACTIVE; project.hidden = false;
+    project.createdAt = Instant.now(); project.updatedAt = Instant.now();
     return project;
   }
 
