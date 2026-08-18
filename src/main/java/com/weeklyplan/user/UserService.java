@@ -8,6 +8,7 @@ import com.weeklyplan.tenant.TenantAccessService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 import java.util.Locale;
@@ -29,14 +30,17 @@ public class UserService {
     return UserResponse.of(user);
   }
 
+  @Transactional
   public UserResponse update(Long id, UpdateUserRequest request) {
     AppUser user = requireManagedUser(id);
     String username = request.username().trim().toLowerCase(Locale.ROOT);
     if (users.existsByUsernameAndIdNot(username, id)) throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
     String displayName = request.displayName().trim();
+    if (displayName.length() < 2 || displayName.length() > 30) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "姓名长度应为 2–30 个字符");
+    }
     user.update(username, displayName, resolveRole(request.role()));
-    users.save(user);
-    return UserResponse.of(user);
+    return UserResponse.of(users.saveAndFlush(user));
   }
 
   public UserResponse moveToCompany(Long id, MoveUserCompanyRequest request, String currentUserId) {
