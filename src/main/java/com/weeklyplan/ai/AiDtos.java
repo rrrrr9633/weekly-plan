@@ -7,5 +7,6 @@ public final class AiDtos {
   private AiDtos() {}
   public record ConversationRequest(@NotBlank String message) {}
   public record ModelProposal(String operationType, JsonNode payload, String preview) {}
-  public record ProposalResponse(Long id, String operationType, String status, JsonNode payload, String preview, JsonNode result, String error, Object missingFields) {}
+  /** Deliberately contains no model payload or raw query rows: those are implementation details, not chat text. */
+  public record ProposalResponse(Long id, String operationType, String status, String preview, String message, String error) {}
 }

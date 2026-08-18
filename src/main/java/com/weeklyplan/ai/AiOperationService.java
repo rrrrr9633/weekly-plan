@@ -29,7 +29,9 @@ public class AiOperationService {
     AiDtos.ModelProposal model = client.propose(message, candidates, today.get(iso.weekBasedYear()), today.get(iso.weekOfWeekBasedYear()));
     AiOperationType type = parseType(model.operationType()); JsonNode payload = model.payload();
     if (payload == null || !payload.isObject() || containsForbiddenField(payload)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "AI 提案包含不允许的身份或租户字段");
-    ObjectNode completed = ((ObjectNode) payload).deepCopy(); Object missing = completePayload(type, completed, user);
+    ObjectNode completed = ((ObjectNode) payload).deepCopy();
+    if (type == AiOperationType.PLAN_CREATE) { normalizePlanCreatePayload(completed); applyScheduleDefaults(completed, message, today); }
+    Object missing = completePayload(type, completed, user);
     AiOperationProposal proposal = proposals.save(AiOperationProposal.create(tenant.currentCompany(), user, type, json(completed), preview(type, completed, model.preview())));
     if (type == AiOperationType.QUERY) proposal.completeReadOnly(json(missing == null ? query(completed) : Map.of("missingFields", missing, "readOnly", true)));
     return response(proposal, missing);
@@ -77,7 +79,66 @@ public class AiOperationService {
   private Project currentProject(long id) { Project project = projects.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "项目不存在")); tenant.assertCompany(project.getCompany()); return project; }
   private List<Map<String, Object>> projectCandidates() { return projects.findByCompanyId(tenant.currentCompany().getId()).stream().map(x -> Map.of("id", (Object)x.getId(), "code", (Object)x.getCode(), "name", (Object)x.getName())).toList(); }
   private Object targetHints(AiOperationType type, AppUser user) { if (type != AiOperationType.PLAN_UPDATE && type != AiOperationType.PLAN_DELETE) return List.of(); return planRepository.findAll().stream().filter(x -> x.getProject().getCompany().getId().equals(tenant.currentCompany().getId()) && x.getUser().getId().equals(user.getId())).map(x -> Map.of("id",x.getId(),"content",x.getContent(),"project",x.getProject().getName(),"weekday",x.getWeekday().name())).toList(); }
-  private String preview(AiOperationType type, JsonNode p, String modelPreview) { return modelPreview == null || modelPreview.isBlank() ? type.name() + ": " + p.toString() : modelPreview; }
+  private String preview(AiOperationType type, JsonNode p, String modelPreview) {
+    if (type == AiOperationType.PLAN_CREATE) {
+      String project = projects.findById(p.path("projectId").asLong()).map(Project::getName).orElse("未指定项目");
+      return "将创建计划：" + p.path("content").asText("未填写内容") + "；项目：" + project + "；ISO " + p.path("year").asInt() + " 年第 " + p.path("weekNumber").asInt() + " 周，" + weekdayLabel(p.path("weekday").asText());
+    }
+    return modelPreview == null || modelPreview.isBlank() ? "已生成操作预览" : modelPreview;
+  }
+  /** Accept common model aliases so a valid creation request cannot get stuck at confirmation. */
+  private void normalizePlanCreatePayload(ObjectNode p) {
+    if (!p.hasNonNull("content")) {
+      for (String alias : List.of("name", "title", "task")) {
+        if (p.hasNonNull(alias) && !p.path(alias).asText().isBlank()) { p.set("content", p.get(alias)); break; }
+      }
+    }
+    if (p.path("weekday").canConvertToInt() && !p.path("weekday").isTextual()) {
+      int day = p.path("weekday").asInt();
+      if (day >= 1 && day <= 7) p.put("weekday", PlanWeekday.values()[day - 1].name());
+    }
+  }
+  /** The date is user input, so it takes precedence over a model guess. */
+  private void applyScheduleDefaults(ObjectNode p, String message, LocalDate today) {
+    LocalDate date = resolveRequestedDate(message, today);
+    WeekFields iso = WeekFields.ISO;
+    String weekday = weekdayName(message, date);
+    if (hasScheduleHint(message)) {
+      p.put("year", date.get(iso.weekBasedYear()));
+      p.put("weekNumber", date.get(iso.weekOfWeekBasedYear()));
+      p.put("weekday", weekday);
+    } else {
+      fill(p, "year", date.get(iso.weekBasedYear()));
+      fill(p, "weekNumber", date.get(iso.weekOfWeekBasedYear()));
+      fill(p, "weekday", weekday);
+    }
+  }
+  private LocalDate resolveRequestedDate(String message, LocalDate today) {
+    String text = message.replaceAll("\\s+", "");
+    java.util.regex.Matcher full = java.util.regex.Pattern.compile("(20\\d{2})[-/.年](\\d{1,2})[-/.月](\\d{1,2})日?").matcher(text);
+    if (full.find()) return dateOrDefault(full.group(1), full.group(2), full.group(3), today);
+    java.util.regex.Matcher monthDay = java.util.regex.Pattern.compile("(\\d{1,2})月(\\d{1,2})日?").matcher(text);
+    if (monthDay.find()) return dateOrDefault(String.valueOf(today.getYear()), monthDay.group(1), monthDay.group(2), today);
+    if (text.contains("后天")) return today.plusDays(2);
+    if (text.contains("明天")) return today.plusDays(1);
+    if (text.contains("下周") || text.contains("下星期")) return today.plusWeeks(1);
+    return today;
+  }
+  private LocalDate dateOrDefault(String year, String month, String day, LocalDate fallback) {
+    try { return LocalDate.of(Integer.parseInt(year), Integer.parseInt(month), Integer.parseInt(day)); }
+    catch (RuntimeException ignored) { return fallback; }
+  }
+  private String weekdayName(String message, LocalDate date) {
+    String text = message.replaceAll("\\s+", "");
+    java.util.regex.Matcher weekday = java.util.regex.Pattern.compile("(?:周|星期|礼拜)([一二三四五六日天])").matcher(text);
+    if (!weekday.find()) return hasExactDay(message) ? PlanWeekday.values()[date.getDayOfWeek().getValue() - 1].name() : "PENDING";
+    return switch (weekday.group(1)) { case "一" -> "MONDAY"; case "二" -> "TUESDAY"; case "三" -> "WEDNESDAY"; case "四" -> "THURSDAY"; case "五" -> "FRIDAY"; case "六" -> "SATURDAY"; default -> "SUNDAY"; };
+  }
+  private boolean hasScheduleHint(String message) { return hasExactDay(message) || message.contains("下周") || message.contains("下星期") || message.contains("本周") || message.contains("本星期") || java.util.regex.Pattern.compile("(?:周|星期|礼拜)[一二三四五六日天]").matcher(message).find(); }
+  private boolean hasExactDay(String message) { return message.contains("明天") || message.contains("后天") || java.util.regex.Pattern.compile("20\\d{2}[-/.年]\\d{1,2}[-/.月]\\d{1,2}日?|\\d{1,2}月\\d{1,2}日?").matcher(message).find(); }
+  private String weekdayLabel(String weekday) {
+    return switch (weekday) { case "MONDAY" -> "周一"; case "TUESDAY" -> "周二"; case "WEDNESDAY" -> "周三"; case "THURSDAY" -> "周四"; case "FRIDAY" -> "周五"; case "SATURDAY" -> "周六"; case "SUNDAY" -> "周日"; default -> "待安排"; };
+  }
   private void fill(ObjectNode p, String field, Object value) { if (!p.hasNonNull(field) && value != null) p.set(field, mapper.valueToTree(value)); }
   private void required(JsonNode p, List<String> fields, String field) { if (!p.hasNonNull(field) || p.path(field).asText().isBlank()) fields.add(field); }
   private boolean containsForbiddenField(JsonNode node) { if (node.isObject()) { var it=node.fieldNames(); while(it.hasNext()) { String k=it.next().toLowerCase(); if(k.contains("user")||k.contains("company")||k.contains("role")||k.contains("auth")||k.contains("member")) return true; } } for(JsonNode c:node) if(containsForbiddenField(c)) return true; return false; }
@@ -85,5 +146,20 @@ public class AiOperationService {
   private Long requiredId(JsonNode p) { if(!p.hasNonNull("id")||p.path("id").asLong()<=0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"缺少资源 id"); return p.path("id").asLong(); }
   private PlanWeekday weekday(JsonNode p) { try{return PlanWeekday.valueOf(p.path("weekday").asText().toUpperCase());}catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"weekday 无效");} }
   private String nullable(JsonNode p,String f){return p.hasNonNull(f)?p.path(f).asText():null;} private String json(Object v){try{return mapper.writeValueAsString(v);}catch(Exception e){throw new IllegalStateException(e);}} private JsonNode tree(String v){try{return mapper.readTree(v);}catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"AI 提案数据无效");}}
-  private AiDtos.ProposalResponse response(AiOperationProposal p,Object missing){return new AiDtos.ProposalResponse(p.getId(),p.getOperationType().name(),p.getStatus().name(),tree(p.getPayload()),p.getPreview(),p.getResultJson()==null?null:tree(p.getResultJson()),p.getErrorMessage(),missing);}
+  private AiDtos.ProposalResponse response(AiOperationProposal p,Object missing) {
+    String message;
+    if (missing != null) message = "还缺少必要信息，请补充后再试。";
+    else if (p.getStatus() == AiProposalStatus.PENDING) message = "已生成预览；确认后才会写入。";
+    else if (p.getStatus() == AiProposalStatus.COMPLETED && p.getOperationType() == AiOperationType.QUERY) message = querySummary(p.getResultJson());
+    else if (p.getStatus() == AiProposalStatus.COMPLETED) message = "操作已完成。";
+    else message = p.getErrorMessage();
+    return new AiDtos.ProposalResponse(p.getId(), p.getOperationType().name(), p.getStatus().name(), p.getPreview(), message, p.getErrorMessage());
+  }
+  private String querySummary(String resultJson) {
+    if (resultJson == null) return "未找到结果。";
+    JsonNode result = tree(resultJson);
+    if (result.isArray()) return result.isEmpty() ? "未找到结果。" : "已找到 " + result.size() + " 条结果。";
+    if (result.has("missingFields")) return "请补充必要信息后再查询。";
+    return "查询已完成。";
+  }
 }
