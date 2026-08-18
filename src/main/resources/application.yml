@@ -3,6 +3,8 @@ server:
   servlet:
     context-path: /api
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: weekly-plan-server
   datasource:
@@ -21,6 +23,11 @@ app:
   security:
     jwt-secret: ${JWT_SECRET:change-this-development-secret-to-a-32-byte-minimum-key}
     access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:43200}
+  ai:
+    base-url: ${AI_BASE_URL:}
+    api-key: ${AI_API_KEY:}
+    model: ${AI_MODEL:}
+    wire-api: ${AI_WIRE_API:responses}
   bootstrap-admin:
     username: ${BOOTSTRAP_ADMIN_USERNAME:admin}
     password: ${BOOTSTRAP_ADMIN_PASSWORD:Admin12345}

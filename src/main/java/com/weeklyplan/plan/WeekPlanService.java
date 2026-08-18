@@ -153,6 +153,29 @@ public class WeekPlanService {
     plan.removeParticipant(actor.getId());
   }
 
+  @Transactional
+  public WeekPlanResponse aiCreate(CreateWeekPlanRequest request) {
+    AppUser actor = tenant.currentUser();
+    return create(String.valueOf(actor.getId()), request);
+  }
+
+  @Transactional
+  public WeekPlanResponse aiUpdateOwned(Long id, UpdateWeekPlanRequest request) {
+    AppUser actor = tenant.currentUser();
+    WeekPlan plan = requirePlanInCurrentCompany(id);
+    if (!plan.getUser().getId().equals(actor.getId())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权修改");
+    plan.update(requireActiveProject(request.projectId()), request.content().trim(), request.weekday());
+    return toResponse(plan);
+  }
+
+  @Transactional
+  public void aiDeleteOwned(Long id) {
+    AppUser actor = tenant.currentUser();
+    WeekPlan plan = requirePlanInCurrentCompany(id);
+    if (!plan.getUser().getId().equals(actor.getId())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "计划不存在或无权删除");
+    plans.delete(plan);
+  }
+
   private WeekPlanResponse toResponse(WeekPlan plan) {
     LocalDate weekStart = LocalDate.of(plan.getYear(), 1, 4)
         .with(WeekFields.ISO.weekOfWeekBasedYear(), plan.getWeekNumber())

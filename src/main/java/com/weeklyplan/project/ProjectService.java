@@ -48,6 +48,20 @@ public class ProjectService {
   @Transactional
   public void delete(Long id) { projects.delete(requireProject(id)); }
 
+  @Transactional
+  public ProjectResponse aiCreate(CreateProjectRequest request) { requireAiAdmin(); return create(request); }
+
+  @Transactional
+  public ProjectResponse aiUpdate(Long id, UpdateProjectRequest request) { requireAiAdmin(); return update(id, request); }
+
+  @Transactional
+  public void aiDelete(Long id) { requireAiAdmin(); delete(id); }
+
+  private void requireAiAdmin() {
+    String role = tenant.currentUser().getRole().getCode();
+    if (!"ADMIN".equals(role) && !"SUPER_ADMIN".equals(role)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅管理员可通过 AI 操作项目");
+  }
+
   public Project requireProject(Long id) {
     Project project = projects.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "项目不存在"));
     tenant.assertCompany(project.getCompany());
