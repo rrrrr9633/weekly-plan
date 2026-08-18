@@ -26,7 +26,7 @@ public class AiOperationService {
   public AiDtos.ProposalResponse propose(String message) {
     AppUser user = tenant.currentUser(); List<Map<String, Object>> candidates = projectCandidates();
     LocalDate today = LocalDate.now(); WeekFields iso = WeekFields.ISO;
-    AiDtos.ModelProposal model = client.propose(message, candidates, chatProjectContext(), chatPlanContext(user), today.get(iso.weekBasedYear()), today.get(iso.weekOfWeekBasedYear()));
+    AiDtos.ModelProposal model = client.propose(message, candidates, chatProjectContext(), chatPlanContext(), today.get(iso.weekBasedYear()), today.get(iso.weekOfWeekBasedYear()));
     AiOperationType type = parseType(model.operationType()); JsonNode payload = model.payload();
     // 只读诉求统一由模型根据受控上下文回答，禁止返回服务端的机械查询统计。
     if (type == AiOperationType.QUERY) { type = AiOperationType.CHAT; payload = mapper.createObjectNode(); }
@@ -117,8 +117,8 @@ public class AiOperationService {
       .map(project -> Map.of("code", (Object) project.getCode(), "name", (Object) project.getName(), "assistOrg", (Object) (project.getAssistOrg() == null ? "" : project.getAssistOrg()), "status", (Object) project.getStatus().name()))
       .toList();
   }
-  private List<Map<String, Object>> chatPlanContext(AppUser user) {
-    List<WeekPlan> readablePlans = tenant.isSuperAdmin() ? planRepository.findAll() : planRepository.findAllParticipatingByUser(user.getId());
+  private List<Map<String, Object>> chatPlanContext() {
+    List<WeekPlan> readablePlans = tenant.isSuperAdmin() ? planRepository.findAll() : planRepository.findByProjectCompanyId(tenant.currentCompany().getId());
     return readablePlans.stream().map(plan -> Map.of(
       "year", (Object) plan.getYear(), "weekNumber", (Object) plan.getWeekNumber(), "weekday", (Object) weekdayLabel(plan.getWeekday().name()),
       "content", (Object) plan.getContent(), "project", (Object) plan.getProject().getName(), "owner", (Object) plan.getUser().getDisplayName(), "status", (Object) plan.getStatus().name()
