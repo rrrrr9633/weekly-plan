@@ -15,7 +15,23 @@ public class AiOperationMemory {
   @Enumerated(EnumType.STRING) @Column(name = "operation_type", nullable = false) private AiOperationType operationType;
   @Column(nullable = false) private String summary;
   @Column(name = "created_at", nullable = false) private Instant createdAt;
+
+  public Long getId() { return id; }
+  public Company getCompany() { return company; }
+  public AppUser getActor() { return actor; }
+  public AiOperationProposal getProposal() { return proposal; }
+  public AiOperationType getOperationType() { return operationType; }
+  public String getSummary() { return summary; }
+  public Instant getCreatedAt() { return createdAt; }
+
   public static AiOperationMemory create(AiOperationProposal proposal, String summary) {
-    AiOperationMemory value = new AiOperationMemory(); value.company = proposal.getCompany(); value.actor = proposal.getRequestedBy(); value.proposal = proposal; value.operationType = proposal.getOperationType(); value.summary = summary; value.createdAt = Instant.now(); return value;
+    AiOperationMemory value = new AiOperationMemory();
+    value.company = proposal.getCompany();
+    value.actor = proposal.getRequestedBy();
+    value.proposal = proposal;
+    value.operationType = proposal.getOperationType();
+    value.summary = summary;
+    value.createdAt = Instant.now();
+    return value;
   }
 }

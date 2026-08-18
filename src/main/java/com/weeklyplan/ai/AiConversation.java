@@ -15,7 +15,13 @@ public class AiConversation {
   @Column(name = "created_at", nullable = false) private Instant createdAt;
   @Column(name = "updated_at", nullable = false) private Instant updatedAt;
   @Column(name = "expires_at", nullable = false) private Instant expiresAt;
-  public Long getId() { return id; } public AppUser getUser() { return user; } public Instant getExpiresAt() { return expiresAt; }
+  public Long getId() { return id; }
+  public Company getCompany() { return company; }
+  public AppUser getUser() { return user; }
+  public String getTitle() { return title; }
+  public Instant getCreatedAt() { return createdAt; }
+  public Instant getUpdatedAt() { return updatedAt; }
+  public Instant getExpiresAt() { return expiresAt; }
   public static AiConversation create(Company company, AppUser user, String title) {
     AiConversation value = new AiConversation(); Instant now = Instant.now();
     value.company = company; value.user = user; value.title = title; value.createdAt = now; value.updatedAt = now; value.expiresAt = now.plus(java.time.Duration.ofDays(3)); return value;

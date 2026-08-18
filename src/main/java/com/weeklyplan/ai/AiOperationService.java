@@ -18,15 +18,19 @@ import java.util.*;
 @Service
 public class AiOperationService {
   private final AiOperationProposalRepository proposals; private final OpenAiResponsesClient client; private final ObjectMapper mapper;
-  private final TenantAccessService tenant; private final ProjectRepository projects; private final WeekPlanRepository planRepository; private final WeekPlanService plans; private final ProjectService projectService;
-  public AiOperationService(AiOperationProposalRepository proposals, OpenAiResponsesClient client, ObjectMapper mapper, TenantAccessService tenant, ProjectRepository projects, WeekPlanRepository planRepository, WeekPlanService plans, ProjectService projectService) {
-    this.proposals = proposals; this.client = client; this.mapper = mapper; this.tenant = tenant; this.projects = projects; this.planRepository = planRepository; this.plans = plans; this.projectService = projectService;
+  private final TenantAccessService tenant; private final ProjectRepository projects; private final WeekPlanRepository planRepository; private final WeekPlanService plans; private final ProjectService projectService; private final AiOperationMemoryRepository memories; private final AiConversationService conversations;
+  public AiOperationService(AiOperationProposalRepository proposals, OpenAiResponsesClient client, ObjectMapper mapper, TenantAccessService tenant, ProjectRepository projects, WeekPlanRepository planRepository, WeekPlanService plans, ProjectService projectService, AiOperationMemoryRepository memories, AiConversationService conversations) {
+    this.proposals = proposals; this.client = client; this.mapper = mapper; this.tenant = tenant; this.projects = projects; this.planRepository = planRepository; this.plans = plans; this.projectService = projectService; this.memories = memories; this.conversations = conversations;
   }
   @Transactional
-  public AiDtos.ProposalResponse propose(String message) {
-    AppUser user = tenant.currentUser(); List<Map<String, Object>> candidates = projectCandidates();
+  public AiDtos.ProposalResponse propose(AiDtos.ConversationRequest request) {
+    String message = request.message();
+    AppUser user = tenant.currentUser();
+    AiConversation conversation = conversations.resolveConversation(request.conversationId(), message);
+    List<AiDtos.ChatMessage> conversationHistory = conversations.historyForModel(conversation);
+    List<Map<String, Object>> candidates = projectCandidates();
     LocalDate today = LocalDate.now(); WeekFields iso = WeekFields.ISO;
-    AiDtos.ModelProposal model = client.propose(message, candidates, chatProjectContext(), chatPlanContext(), today.get(iso.weekBasedYear()), today.get(iso.weekOfWeekBasedYear()));
+    AiDtos.ModelProposal model = client.propose(conversationHistory, message, candidates, chatProjectContext(), chatPlanContext(), today.get(iso.weekBasedYear()), today.get(iso.weekOfWeekBasedYear()));
     AiOperationType type = parseType(model.operationType()); JsonNode payload = model.payload();
     // 只读诉求统一由模型根据受控上下文回答，禁止返回服务端的机械查询统计。
     if (type == AiOperationType.QUERY) { type = AiOperationType.CHAT; payload = mapper.createObjectNode(); }
@@ -37,7 +41,10 @@ public class AiOperationService {
     AiOperationProposal proposal = proposals.save(AiOperationProposal.create(tenant.currentCompany(), user, type, json(completed), preview(type, completed, model.preview())));
     if (type == AiOperationType.QUERY) proposal.completeReadOnly(json(missing == null ? query(completed) : Map.of("missingFields", missing, "readOnly", true)));
     if (type == AiOperationType.CHAT) proposal.completeReadOnly(json(Map.of("answer", proposal.getPreview())));
-    return response(proposal, missing);
+    AiDtos.ProposalResponse response = response(proposal, missing, conversation.getId());
+    conversations.append(conversation, AiConversationMessage.Sender.USER, message, null);
+    conversations.append(conversation, AiConversationMessage.Sender.ASSISTANT, conversationReply(response), proposal);
+    return response;
   }
   @Transactional(readOnly = true)
   public Map<String, Object> context() { return Map.of("projects", projectCandidates()); }
@@ -49,7 +56,7 @@ public class AiOperationService {
     if (proposal.getStatus() == AiProposalStatus.COMPLETED || proposal.getStatus() != AiProposalStatus.PENDING) return response(proposal, null);
     ObjectNode payload = (ObjectNode) tree(proposal.getPayload()); Object missing = completePayload(proposal.getOperationType(), payload, user);
     if (missing != null) return response(proposal, missing);
-    proposal.confirm(); try { proposal.complete(json(execute(proposal.getOperationType(), payload))); } catch (ResponseStatusException error) { proposal.fail(error.getReason()); throw error; }
+    proposal.confirm(); try { proposal.complete(json(execute(proposal.getOperationType(), payload))); if (proposal.getOperationType() != AiOperationType.CHAT && proposal.getOperationType() != AiOperationType.QUERY) memories.save(AiOperationMemory.create(proposal, proposal.getPreview())); } catch (ResponseStatusException error) { proposal.fail(error.getReason()); throw error; }
     return response(proposal, null);
   }
   @Transactional
@@ -195,9 +202,12 @@ public class AiOperationService {
   private PlanWeekday weekday(JsonNode p) { try{return PlanWeekday.valueOf(p.path("weekday").asText().toUpperCase());}catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"weekday 无效");} }
   private String nullable(JsonNode p,String f){return p.hasNonNull(f)?p.path(f).asText():null;} private String json(Object v){try{return mapper.writeValueAsString(v);}catch(Exception e){throw new IllegalStateException(e);}} private JsonNode tree(String v){try{return mapper.readTree(v);}catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"AI 提案数据无效");}}
   private AiDtos.ProposalResponse response(AiOperationProposal p, Object missing) {
-    return response(p, p.getOperationType(), null, p.getPreview(), missing, p.getErrorMessage());
+    return response(p, missing, null);
   }
-  private AiDtos.ProposalResponse response(AiOperationProposal p, AiOperationType type, JsonNode payload, String preview, Object missing, String error) {
+  private AiDtos.ProposalResponse response(AiOperationProposal p, Object missing, Long conversationId) {
+    return response(p, p.getOperationType(), null, p.getPreview(), missing, p.getErrorMessage(), conversationId);
+  }
+  private AiDtos.ProposalResponse response(AiOperationProposal p, AiOperationType type, JsonNode payload, String preview, Object missing, String error, Long conversationId) {
     String message;
     if (missing != null) message = "请补充以下信息，然后生成可确认的操作。";
     else if (p != null && p.getStatus() == AiProposalStatus.PENDING) message = "已生成预览；确认后才会写入。";
@@ -205,7 +215,10 @@ public class AiOperationService {
     else if (p != null && p.getStatus() == AiProposalStatus.COMPLETED && p.getOperationType() == AiOperationType.CHAT) message = chatAnswer(p.getResultJson(), p.getPreview());
     else if (p != null && p.getStatus() == AiProposalStatus.COMPLETED) message = "操作已完成。";
     else message = error;
-    return new AiDtos.ProposalResponse(p == null ? null : p.getId(), type.name(), p == null ? "NEEDS_INPUT" : p.getStatus().name(), preview, message, error, missing);
+    return new AiDtos.ProposalResponse(p == null ? null : p.getId(), type.name(), p == null ? "NEEDS_INPUT" : p.getStatus().name(), preview, message, error, missing, conversationId);
+  }
+  private String conversationReply(AiDtos.ProposalResponse response) {
+    return response.operationType().equals(AiOperationType.CHAT.name()) ? response.message() : response.preview();
   }
   private String chatAnswer(String resultJson, String fallback) {
     if (resultJson == null) return fallback == null ? "暂时无法生成回答。" : fallback;

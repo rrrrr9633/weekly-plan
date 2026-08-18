@@ -7,6 +7,6 @@ import java.util.Optional;
 
 public interface AiConversationRepository extends JpaRepository<AiConversation, Long> {
   List<AiConversation> findByUserIdAndExpiresAtAfterOrderByUpdatedAtDesc(Long userId, Instant now);
-  Optional<AiConversation> findByIdAndUserIdAndExpiresAtAfter(Long id, Long userId, Instant now);
-  long deleteByExpiresAtBefore(Instant time);
+  Optional<AiConversation> findByIdAndUserId(Long id, Long userId);
+  long deleteByExpiresAtBefore(Instant cutoff);
 }
