@@ -32,6 +32,9 @@ public class AiOperationService {
     ObjectNode completed = ((ObjectNode) payload).deepCopy();
     if (type == AiOperationType.PLAN_CREATE) { normalizePlanCreatePayload(completed); applyScheduleDefaults(completed, message, today); }
     Object missing = completePayload(type, completed, user);
+    if (missing != null && type != AiOperationType.QUERY) {
+      return response(null, type, completed, preview(type, completed, model.preview()), missing, null);
+    }
     AiOperationProposal proposal = proposals.save(AiOperationProposal.create(tenant.currentCompany(), user, type, json(completed), preview(type, completed, model.preview())));
     if (type == AiOperationType.QUERY) proposal.completeReadOnly(json(missing == null ? query(completed) : Map.of("missingFields", missing, "readOnly", true)));
     return response(proposal, missing);
@@ -146,14 +149,17 @@ public class AiOperationService {
   private Long requiredId(JsonNode p) { if(!p.hasNonNull("id")||p.path("id").asLong()<=0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"缺少资源 id"); return p.path("id").asLong(); }
   private PlanWeekday weekday(JsonNode p) { try{return PlanWeekday.valueOf(p.path("weekday").asText().toUpperCase());}catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"weekday 无效");} }
   private String nullable(JsonNode p,String f){return p.hasNonNull(f)?p.path(f).asText():null;} private String json(Object v){try{return mapper.writeValueAsString(v);}catch(Exception e){throw new IllegalStateException(e);}} private JsonNode tree(String v){try{return mapper.readTree(v);}catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"AI 提案数据无效");}}
-  private AiDtos.ProposalResponse response(AiOperationProposal p,Object missing) {
+  private AiDtos.ProposalResponse response(AiOperationProposal p, Object missing) {
+    return response(p, p.getOperationType(), null, p.getPreview(), missing, p.getErrorMessage());
+  }
+  private AiDtos.ProposalResponse response(AiOperationProposal p, AiOperationType type, JsonNode payload, String preview, Object missing, String error) {
     String message;
-    if (missing != null) message = "还缺少必要信息，请补充后再试。";
-    else if (p.getStatus() == AiProposalStatus.PENDING) message = "已生成预览；确认后才会写入。";
-    else if (p.getStatus() == AiProposalStatus.COMPLETED && p.getOperationType() == AiOperationType.QUERY) message = querySummary(p.getResultJson());
-    else if (p.getStatus() == AiProposalStatus.COMPLETED) message = "操作已完成。";
-    else message = p.getErrorMessage();
-    return new AiDtos.ProposalResponse(p.getId(), p.getOperationType().name(), p.getStatus().name(), p.getPreview(), message, p.getErrorMessage());
+    if (missing != null) message = "请补充以下信息，然后生成可确认的操作。";
+    else if (p != null && p.getStatus() == AiProposalStatus.PENDING) message = "已生成预览；确认后才会写入。";
+    else if (p != null && p.getStatus() == AiProposalStatus.COMPLETED && p.getOperationType() == AiOperationType.QUERY) message = querySummary(p.getResultJson());
+    else if (p != null && p.getStatus() == AiProposalStatus.COMPLETED) message = "操作已完成。";
+    else message = error;
+    return new AiDtos.ProposalResponse(p == null ? null : p.getId(), type.name(), p == null ? "NEEDS_INPUT" : p.getStatus().name(), preview, message, error, missing);
   }
   private String querySummary(String resultJson) {
     if (resultJson == null) return "未找到结果。";
