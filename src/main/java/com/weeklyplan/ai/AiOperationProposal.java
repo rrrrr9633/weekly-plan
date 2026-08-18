@@ -3,7 +3,9 @@ package com.weeklyplan.ai;
 import com.weeklyplan.company.Company;
 import com.weeklyplan.user.AppUser;
 import jakarta.persistence.*;
+import java.sql.Types;
 import java.time.Instant;
+import org.hibernate.annotations.JdbcTypeCode;
 
 @Entity
 @Table(name = "ai_operation_proposals")
@@ -13,10 +15,10 @@ public class AiOperationProposal {
   @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "requested_by_user_id", nullable = false) private AppUser requestedBy;
   @Enumerated(EnumType.STRING) @Column(name = "operation_type", nullable = false) private AiOperationType operationType;
   @Enumerated(EnumType.STRING) @Column(nullable = false) private AiProposalStatus status;
-  @Lob @Column(nullable = false) private String payload;
-  @Lob private String preview;
-  @Lob @Column(name = "result_json") private String resultJson;
-  @Lob @Column(name = "error_message") private String errorMessage;
+  @JdbcTypeCode(Types.LONGVARCHAR) @Column(nullable = false) private String payload;
+  @JdbcTypeCode(Types.LONGVARCHAR) private String preview;
+  @JdbcTypeCode(Types.LONGVARCHAR) @Column(name = "result_json") private String resultJson;
+  @JdbcTypeCode(Types.LONGVARCHAR) @Column(name = "error_message") private String errorMessage;
   @Column(name = "created_at", nullable = false) private Instant createdAt;
   @Column(name = "confirmed_at") private Instant confirmedAt;
   @Column(name = "executed_at") private Instant executedAt;
