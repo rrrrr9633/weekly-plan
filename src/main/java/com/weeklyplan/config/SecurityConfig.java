@@ -24,7 +24,7 @@ public class SecurityConfig {
       .authorizeHttpRequests(auth -> auth
         .requestMatchers("/auth/**", "/companies/public", "/error").permitAll()
         .requestMatchers("/companies/**").hasRole("SUPER_ADMIN")
-        .requestMatchers("/users/me", "/users/me/**").authenticated()
+        .requestMatchers("/users/me", "/users/me/**", "/users/members").authenticated()
         .requestMatchers("/users/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
         .requestMatchers(HttpMethod.GET, "/projects/**").authenticated()
         .requestMatchers("/projects/**", "/plans/assign").hasAnyRole("ADMIN", "SUPER_ADMIN")

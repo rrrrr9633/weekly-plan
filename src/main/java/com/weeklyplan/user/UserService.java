@@ -20,6 +20,9 @@ public class UserService {
   public List<UserResponse> list() {
     return users.findByCompanyId(tenant.currentCompany().getId()).stream().map(UserResponse::of).toList();
   }
+  public List<UserResponse> listMembers() {
+    return users.findByCompanyId(tenant.currentCompany().getId()).stream().map(UserResponse::of).toList();
+  }
   public UserResponse create(CreateUserRequest request) {
     String username = request.username().trim().toLowerCase(Locale.ROOT);
     if (users.existsByUsername(username)) throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");

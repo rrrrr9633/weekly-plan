@@ -12,6 +12,7 @@ public class UserController {
   private final UserService users;
   public UserController(UserService users) { this.users = users; }
   @GetMapping public List<UserResponse> list() { return users.list(); }
+  @GetMapping("/members") public List<UserResponse> listMembers() { return users.listMembers(); }
   @PostMapping @ResponseStatus(HttpStatus.CREATED) public UserResponse create(@Valid @RequestBody CreateUserRequest request) { return users.create(request); }
   @GetMapping("/me") public UserResponse getMyProfile(Authentication authentication) { return users.getMyProfile(authentication.getName()); }
   @PutMapping("/me") public UserResponse updateMyProfile(Authentication authentication, @Valid @RequestBody UpdateMyProfileRequest request) { return users.updateMyProfile(authentication.getName(), request); }
