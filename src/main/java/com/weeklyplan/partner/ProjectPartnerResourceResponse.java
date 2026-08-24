@@ -1,0 +1,2 @@
+package com.weeklyplan.partner;
+public record ProjectPartnerResourceResponse(String id,String name,String region,String cooperationStatus,String cooperationRole,String note,boolean preferred){static ProjectPartnerResourceResponse of(PartnerResourceProject link){PartnerResource r=link.getResource();return new ProjectPartnerResourceResponse(String.valueOf(r.getId()),r.getName(),r.getRegion(),r.getCooperationStatus(),link.getCooperationRole(),link.getNote(),r.isPreferred());}}
