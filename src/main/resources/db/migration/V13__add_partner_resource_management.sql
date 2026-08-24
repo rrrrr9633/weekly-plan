@@ -1,5 +1,8 @@
 INSERT INTO feature_modules (code, name, description) VALUES
-  ('PARTNER_RESOURCE_MANAGEMENT', '资源管理系统', '管理外部合作方、联系人、合作跟进与项目关联');
+  ('PARTNER_RESOURCE_MANAGEMENT', '资源管理系统', '管理外部合作方、联系人、合作跟进与项目关联')
+ON DUPLICATE KEY UPDATE
+  name = VALUES(name),
+  description = VALUES(description);
 
 CREATE TABLE partner_resources (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -33,7 +36,7 @@ CREATE TABLE partner_resource_tags (
 CREATE TABLE partner_resource_contacts (
   id BIGINT AUTO_INCREMENT PRIMARY KEY, resource_id BIGINT NOT NULL,
   name VARCHAR(64) NOT NULL, title VARCHAR(64), phone VARCHAR(32), wechat VARCHAR(64), email VARCHAR(128),
-  PRIMARY KEY (id), CONSTRAINT fk_partner_resource_contacts_resource FOREIGN KEY (resource_id) REFERENCES partner_resources(id) ON DELETE CASCADE
+  CONSTRAINT fk_partner_resource_contacts_resource FOREIGN KEY (resource_id) REFERENCES partner_resources(id) ON DELETE CASCADE
 );
 CREATE TABLE partner_resource_follow_ups (
   id BIGINT AUTO_INCREMENT PRIMARY KEY, resource_id BIGINT NOT NULL, content TEXT NOT NULL,

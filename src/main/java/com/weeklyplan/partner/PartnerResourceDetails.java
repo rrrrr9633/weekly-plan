@@ -1,5 +1,4 @@
 package com.weeklyplan.partner;
 import java.time.*;
-public record PartnerResourceContactResponse(String id,String name,String title,String phone,String wechat,String email){static PartnerResourceContactResponse of(PartnerResourceContact c){return new PartnerResourceContactResponse(String.valueOf(c.getId()),c.getName(),c.getTitle(),c.getPhone(),c.getWechat(),c.getEmail());}}
 record PartnerResourceFollowUpResponse(String id,String content,LocalDate followUpDate,String createdByName,Instant createdAt){static PartnerResourceFollowUpResponse of(PartnerResourceFollowUp f){String n=f.getCreatedBy().getDisplayName();return new PartnerResourceFollowUpResponse(String.valueOf(f.getId()),f.getContent(),f.getFollowUpDate(),n==null||n.isBlank()?f.getCreatedBy().getUsername():n,f.getCreatedAt());}}
 record PartnerResourceProjectResponse(String id,String code,String name,String cooperationRole,String note){static PartnerResourceProjectResponse of(PartnerResourceProject p){return new PartnerResourceProjectResponse(String.valueOf(p.getProject().getId()),p.getProject().getCode(),p.getProject().getName(),p.getCooperationRole(),p.getNote());}}
