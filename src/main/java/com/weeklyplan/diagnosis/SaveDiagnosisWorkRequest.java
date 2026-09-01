@@ -7,4 +7,4 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
 
-public record SaveDiagnosisWorkRequest(@NotNull LocalDate workDate, @NotBlank @Size(max = 128) String enterpriseName, @NotBlank @Size(max = 255) String address, @NotEmpty List<Long> participantIds) {}
+public record SaveDiagnosisWorkRequest(@NotNull LocalDate workDate, @NotBlank @Size(max = 128) String enterpriseName, @NotBlank @Size(max = 128) String county, @NotBlank String diagnosisTime, @NotNull Integer diagnosisRound, @Size(max = 128) String serviceProviderContact, @NotEmpty List<Long> participantIds) {}
