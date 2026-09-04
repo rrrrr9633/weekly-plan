@@ -6,4 +6,5 @@ import java.util.List;
 
 interface DiagnosisWorkRepository extends JpaRepository<DiagnosisWork, Long> {
   List<DiagnosisWork> findByCompanyIdAndWorkDateBetweenOrderByWorkDateAscCreatedAtAsc(Long companyId, LocalDate start, LocalDate end);
+  List<DiagnosisWork> findByCompanyIdAndDiagnosisRound(Long companyId, Integer diagnosisRound);
 }

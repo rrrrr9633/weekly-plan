@@ -46,9 +46,10 @@ public class DiagnosisWorkbookImportService {
 
   private Header locateHeader(Sheet sheet) {
     for (Row row : sheet) {
-      int date = -1, enterprise = -1, county = -1, diagnosisTime = -1, round = -1, contact = -1, contactPhone = -1, participants = -1;
+      int date = -1, enterprise = -1, county = -1, diagnosisTime = -1, round = -1, contact = -1, contactPhone = -1;
+      List<Integer> participants = new ArrayList<>();
       List<DateColumn> diagnosisDates = new ArrayList<>();
-      for (Cell cell : row) { String value = formatter.formatCellValue(cell).trim(); if (value.equals("时间") || value.equals("日期") || value.equals("诊断日期")) date = cell.getColumnIndex(); if (value.contains("企业名称") || value.equals("企业")) enterprise = cell.getColumnIndex(); if (value.contains("县区") || value.contains("区（县）") || value.contains("区(县)") || value.equals("地址")) county = cell.getColumnIndex(); if (value.contains("诊断时间") && !value.matches("第[一二三四五六七八九十0-9]+次诊断时间")) diagnosisTime = cell.getColumnIndex(); if (value.contains("第几次") || value.contains("入企")) round = cell.getColumnIndex(); if (value.contains("企业联系人")) contact = cell.getColumnIndex(); if (value.contains("企业联系方式") || value.contains("企业联系电话")) contactPhone = cell.getColumnIndex(); if (value.contains("诊断人员1")) participants = cell.getColumnIndex(); int diagnosisRound = roundInHeader(value); if (diagnosisRound > 0 && value.contains("诊断时间")) diagnosisDates.add(new DateColumn(cell.getColumnIndex(), diagnosisRound)); }
+      for (Cell cell : row) { String value = formatter.formatCellValue(cell).trim(); if (value.equals("时间") || value.equals("日期") || value.equals("诊断日期")) date = cell.getColumnIndex(); if (value.contains("企业名称") || value.equals("企业")) enterprise = cell.getColumnIndex(); if (value.contains("县区") || value.contains("区（县）") || value.contains("区(县)") || value.equals("地址")) county = cell.getColumnIndex(); if (value.contains("诊断时间") && !value.matches("第[一二三四五六七八九十0-9]+次诊断时间")) diagnosisTime = cell.getColumnIndex(); if (value.contains("第几次") || value.contains("入企")) round = cell.getColumnIndex(); if (value.contains("企业联系人")) contact = cell.getColumnIndex(); if (value.contains("企业联系方式") || value.contains("企业联系电话")) contactPhone = cell.getColumnIndex(); if (value.contains("诊断人员")) participants.add(cell.getColumnIndex()); int diagnosisRound = roundInHeader(value); if (diagnosisRound > 0 && value.contains("诊断时间")) diagnosisDates.add(new DateColumn(cell.getColumnIndex(), diagnosisRound)); }
       if (date >= 0) diagnosisDates.add(new DateColumn(date, -1));
       if (enterprise >= 0 && !diagnosisDates.isEmpty()) return new Header(row.getRowNum(), enterprise, county, diagnosisTime, round, contact, contactPhone, participants, diagnosisDates);
     }
@@ -56,11 +57,11 @@ public class DiagnosisWorkbookImportService {
   }
 
   private String text(Row row, int column) { return column < 0 || row.getCell(column) == null ? "" : formatter.formatCellValue(row.getCell(column)).trim(); }
-  private List<String> participants(Row row, int column) { String value = text(row, column); return value.isBlank() ? List.of() : List.of(value.split("[,，、/\\s]+")); }
+  private List<String> participants(Row row, List<Integer> columns) { return columns.stream().flatMap(column -> List.of(text(row, column).split("[,，、/\\s]+")).stream()).filter(value -> !value.isBlank()).distinct().toList(); }
   private LocalDate date(Row row, int column) { if (column < 0 || row.getCell(column) == null) return null; Cell cell = row.getCell(column); if (cell.getCellType() == org.apache.poi.ss.usermodel.CellType.NUMERIC && org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) return cell.getDateCellValue().toInstant().atZone(ZoneId.systemDefault()).toLocalDate(); String value = text(row, column).replace('年', '-').replace('月', '-').replace("日", "").replace('/', '-'); try { return LocalDate.parse(value); } catch (Exception ignored) { return null; } }
   private int round(String value) { try { return Integer.parseInt(value.replaceAll("[^0-9]", "")); } catch (Exception ignored) { return 1; } }
   private String countyOnly(String value) { var matcher = java.util.regex.Pattern.compile("^(.{2,12}?(?:县|区|市辖区))").matcher(value); return matcher.find() ? matcher.group(1) : value; }
   private int roundInHeader(String value) { String digits = value.replaceAll("[^0-9]", ""); if (!digits.isBlank()) return Integer.parseInt(digits); String chinese = value.replaceAll("[^一二三四五六七八九十]", ""); return switch (chinese) { case "一" -> 1; case "二" -> 2; case "三" -> 3; case "四" -> 4; case "五" -> 5; default -> -1; }; }
   private record DateColumn(int column, int round) {}
-  private record Header(int rowIndex, int enterprise, int county, int diagnosisTime, int round, int contact, int contactPhone, int participants, List<DateColumn> dateColumns) {}
+  private record Header(int rowIndex, int enterprise, int county, int diagnosisTime, int round, int contact, int contactPhone, List<Integer> participants, List<DateColumn> dateColumns) {}
 }
