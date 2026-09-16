@@ -7,5 +7,7 @@ import jakarta.validation.constraints.Size;
 public record AuthRequest(
   @NotBlank @Size(max = 64) String username,
   @NotBlank @Size(min = 8, max = 72) String password,
-  @Positive Long companyId
+  @Positive Long companyId,
+  @Size(max = 128) String newCompanyName,
+  @Size(max = 64) String newCompanyCode
 ) {}

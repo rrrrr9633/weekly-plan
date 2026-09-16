@@ -23,6 +23,7 @@ public class SecurityConfig {
     return http.csrf(csrf -> csrf.disable()).cors(cors -> {}).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
       .authorizeHttpRequests(auth -> auth
         .requestMatchers("/auth/**", "/companies/public", "/error").permitAll()
+        .requestMatchers("/registration-requests/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
         .requestMatchers("/companies/**").hasRole("SUPER_ADMIN")
         .requestMatchers("/users/me", "/users/me/**", "/users/members").authenticated()
         .requestMatchers("/users/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
