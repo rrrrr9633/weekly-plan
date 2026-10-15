@@ -13,7 +13,7 @@ public class DiagnosisWorkController {
   private final DiagnosisWorkService works;
   private final DiagnosisWorkbookImportService workbookImport;
   public DiagnosisWorkController(DiagnosisWorkService works, DiagnosisWorkbookImportService workbookImport) { this.works = works; this.workbookImport = workbookImport; }
-  @GetMapping public List<DiagnosisWorkResponse> list(@RequestParam LocalDate start, @RequestParam LocalDate end) { return works.list(start, end); }
+  @GetMapping public List<DiagnosisWorkResponse> list(@RequestParam LocalDate start, @RequestParam LocalDate end, @RequestParam(required = false) String enterprise, @RequestParam(required = false) String participant) { return works.list(start, end, enterprise, participant); }
   @PostMapping @ResponseStatus(HttpStatus.CREATED) public DiagnosisWorkResponse create(@Valid @RequestBody SaveDiagnosisWorkRequest request) { return works.create(request); }
   @PutMapping("/{id}") public DiagnosisWorkResponse update(@PathVariable Long id, @Valid @RequestBody SaveDiagnosisWorkRequest request) { return works.update(id, request); }
   @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void delete(@PathVariable Long id) { works.delete(id); }
