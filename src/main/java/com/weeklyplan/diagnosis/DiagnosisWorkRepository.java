@@ -1,5 +1,6 @@
 package com.weeklyplan.diagnosis;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -9,6 +10,16 @@ import java.util.List;
 interface DiagnosisWorkRepository extends JpaRepository<DiagnosisWork, Long> {
   List<DiagnosisWork> findByCompanyIdAndWorkDateBetweenOrderByWorkDateAscCreatedAtAsc(Long companyId, LocalDate start, LocalDate end);
   List<DiagnosisWork> findByCompanyIdAndDiagnosisRound(Long companyId, Integer diagnosisRound);
+  @EntityGraph(attributePaths = "participants")
+  List<DiagnosisWork> findByCompanyId(Long companyId);
+
+  @Query("select work.enterpriseName as enterpriseName, work.diagnosisRound as diagnosisRound from DiagnosisWork work where work.company.id = :companyId")
+  List<EnterpriseRound> findEnterpriseRounds(@Param("companyId") Long companyId);
+
+  interface EnterpriseRound {
+    String getEnterpriseName();
+    Integer getDiagnosisRound();
+  }
 
   @Query("""
     select distinct work from DiagnosisWork work
