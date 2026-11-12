@@ -4,7 +4,6 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
 
@@ -26,13 +25,28 @@ class WatermarkEnterpriseWorkbookServiceTest {
       writeRow(sheet, 5, "鞍山制药有限公司", "9122", "医药制造业", "鞍山市", "铁西区", "重复");
     });
 
-    List<ImportedWatermarkEnterprise> rows = importer.parse(file("企业.xlsx", workbook));
-
     assertEquals(List.of(
         new ImportedWatermarkEnterprise("辽宁福顺堂药业有限公司", "铁岭市", "西丰县"),
         new ImportedWatermarkEnterprise("鞍山制药有限公司", "鞍山市", "铁西区"),
         new ImportedWatermarkEnterprise("辽宁阳光健康科技有限公司", "沈阳市", "铁西区")
-    ), rows);
+    ), importer.parse(file("企业.xlsx", workbook)));
+  }
+
+  @Test
+  void infersHeaderlessExportLikeTheScreenshot() throws Exception {
+    byte[] workbook = workbook(sheet -> {
+      writeRow(sheet, 0, "辽宁祥兴药业有限公司", "*256*", "医药制造业", "本溪市", "桓仁满族自治县", "仇仁垒");
+      writeRow(sheet, 1, "辽宁福顺堂药业有限公司", "9121", "医药制造业", "铁岭市", "西丰县", "王春凤");
+      writeRow(sheet, 2, "鞍山制药有限公司", "9122", "医药制造业", "鞍山市", "铁西区", "张军");
+      writeRow(sheet, 3, "辽宁阳光健康科技有限公司", "9123", "医药制造业", "沈阳市", "铁西区", "宋明");
+    });
+
+    assertEquals(List.of(
+        new ImportedWatermarkEnterprise("辽宁祥兴药业有限公司", "本溪市", "桓仁满族自治县"),
+        new ImportedWatermarkEnterprise("辽宁福顺堂药业有限公司", "铁岭市", "西丰县"),
+        new ImportedWatermarkEnterprise("鞍山制药有限公司", "鞍山市", "铁西区"),
+        new ImportedWatermarkEnterprise("辽宁阳光健康科技有限公司", "沈阳市", "铁西区")
+    ), importer.parse(file("无表头.xlsx", workbook)));
   }
 
   @Test
@@ -65,7 +79,7 @@ class WatermarkEnterpriseWorkbookServiceTest {
     MultipartFile file = mock(MultipartFile.class);
     when(file.getOriginalFilename()).thenReturn(filename);
     when(file.isEmpty()).thenReturn(false);
-    when(file.getInputStream()).thenReturn(new ByteArrayInputStream(content));
+    when(file.getBytes()).thenReturn(content);
     return file;
   }
 
