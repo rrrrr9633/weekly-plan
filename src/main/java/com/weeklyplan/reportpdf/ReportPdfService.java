@@ -2,6 +2,7 @@ package com.weeklyplan.reportpdf;
 
 import com.weeklyplan.module.FeatureModuleService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -15,18 +16,30 @@ import java.util.stream.Stream;
 
 @Service
 public class ReportPdfService {
+  static final MediaType DOCX = MediaType.parseMediaType(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  );
   private static final String MODULE = "REPORT_COVER_PDF";
   private final FeatureModuleService modules;
   private final LibreOfficePdfConverter converter;
-  private final CoverPdfComposer composer;
+  private final CoverPdfComposer pdfComposer;
+  private final CoverWordComposer wordComposer;
 
-  public ReportPdfService(FeatureModuleService modules, LibreOfficePdfConverter converter, CoverPdfComposer composer) {
+  public ReportPdfService(
+      FeatureModuleService modules,
+      LibreOfficePdfConverter converter,
+      CoverPdfComposer pdfComposer,
+      CoverWordComposer wordComposer
+  ) {
     this.modules = modules;
     this.converter = converter;
-    this.composer = composer;
+    this.pdfComposer = pdfComposer;
+    this.wordComposer = wordComposer;
   }
 
-  public byte[] convert(MultipartFile word, MultipartFile cover) {
+  public record Export(byte[] bytes, String filename, MediaType mediaType) {}
+
+  public Export convert(MultipartFile word, MultipartFile cover, String format) {
     modules.requireEnabled(MODULE);
     if (word == null || word.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请上传 Word 报告");
     if (cover == null || cover.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请上传封面图片");
@@ -34,13 +47,18 @@ public class ReportPdfService {
     String coverName = filename(cover);
     if (!isWord(wordName)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "报告请上传 .doc 或 .docx");
     if (!isImage(coverName)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "封面请上传 jpg 或 png");
+    boolean asWord = isWordFormat(format);
     Path work = null;
     try {
       work = Files.createTempDirectory("report-pdf-");
       Path input = work.resolve(safeName(wordName, ".docx"));
       Files.write(input, word.getBytes());
+      if (asWord) {
+        byte[] docx = converter.convertToDocx(input, work);
+        return new Export(wordComposer.replaceFirstPage(docx, cover.getBytes()), outputName(word, true), DOCX);
+      }
       byte[] pdf = converter.convertWord(input, work);
-      return composer.replaceFirstPage(pdf, cover.getBytes());
+      return new Export(pdfComposer.replaceFirstPage(pdf, cover.getBytes()), outputName(word, false), MediaType.APPLICATION_PDF);
     } catch (ResponseStatusException error) {
       throw error;
     } catch (IOException error) {
@@ -50,11 +68,16 @@ public class ReportPdfService {
     }
   }
 
-  public String outputName(MultipartFile word) {
+  public String outputName(MultipartFile word, boolean asWord) {
     String name = filename(word);
     int dot = name.lastIndexOf('.');
     String stem = dot > 0 ? name.substring(0, dot) : (name.isBlank() ? "报告" : name);
-    return stem + "-盖章封面.pdf";
+    return stem + (asWord ? "-盖章封面.docx" : "-盖章封面.pdf");
+  }
+
+  private boolean isWordFormat(String format) {
+    String value = format == null ? "" : format.trim().toLowerCase(Locale.ROOT);
+    return value.equals("word") || value.equals("docx");
   }
 
   private boolean isWord(String name) {

@@ -21,6 +21,20 @@ class LibreOfficePdfConverter {
   }
 
   byte[] convertWord(Path input, Path workDir) {
+    return convert(input, workDir, "pdf:writer_pdf_Export", ".pdf", "Word 转 PDF");
+  }
+
+  byte[] convertToDocx(Path input, Path workDir) {
+    String name = input.getFileName().toString().toLowerCase();
+    try {
+      if (name.endsWith(".docx")) return Files.readAllBytes(input);
+    } catch (IOException error) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无法读取 Word 文件");
+    }
+    return convert(input, workDir, "docx", ".docx", "旧版 Word 转 docx");
+  }
+
+  private byte[] convert(Path input, Path workDir, String filter, String extension, String label) {
     String bin = resolveBin();
     Path profile = workDir.resolve("lo-profile");
     try {
@@ -33,7 +47,7 @@ class LibreOfficePdfConverter {
           "--norestore",
           "--nolockcheck",
           "-env:UserInstallation=" + profile.toUri(),
-          "--convert-to", "pdf:writer_pdf_Export",
+          "--convert-to", filter,
           "--outdir", workDir.toAbsolutePath().toString(),
           input.toAbsolutePath().toString()
       );
@@ -45,21 +59,21 @@ class LibreOfficePdfConverter {
       String log = Files.exists(logFile) ? Files.readString(logFile, StandardCharsets.UTF_8) : "";
       if (!finished) {
         process.destroyForcibly();
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Word 转 PDF 超时，请把文档页数减少后再试");
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + "超时，请把文档页数减少后再试");
       }
       if (process.exitValue() != 0) {
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Word 转 PDF 失败。" + brief(log));
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + "失败。" + brief(log));
       }
-      Path pdf = workDir.resolve(replaceExtension(input.getFileName().toString(), ".pdf"));
-      if (!Files.exists(pdf)) {
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Word 转 PDF 没有生成文件。" + brief(log));
+      Path output = workDir.resolve(replaceExtension(input.getFileName().toString(), extension));
+      if (!Files.exists(output)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + "没有生成文件。" + brief(log));
       }
-      return Files.readAllBytes(pdf);
+      return Files.readAllBytes(output);
     } catch (ResponseStatusException error) {
       throw error;
     } catch (InterruptedException error) {
       Thread.currentThread().interrupt();
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Word 转 PDF 被中断");
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + "被中断");
     } catch (IOException error) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无法调用 LibreOffice 转换 Word");
     }
