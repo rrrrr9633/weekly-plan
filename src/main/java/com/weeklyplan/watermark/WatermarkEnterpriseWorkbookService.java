@@ -92,8 +92,13 @@ public class WatermarkEnterpriseWorkbookService {
       LocalDateTime visit2 = parseVisitTime(cell(row, header.visit2));
       LocalDateTime visit3 = parseVisitTime(cell(row, header.visit3));
       unique.put(
-          name + '\u0000' + city + '\u0000' + county,
-          new ImportedWatermarkEnterprise(name, city, county, visit1, visit2, visit3, visitsProvided)
+          WatermarkPlaceText.identity(name, city, county),
+          new ImportedWatermarkEnterprise(
+              WatermarkPlaceText.clean(name),
+              WatermarkPlaceText.clean(city),
+              WatermarkPlaceText.clean(county),
+              visit1, visit2, visit3, visitsProvided
+          )
       );
     }
     if (unique.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "没有解析到企业名称和区县，请确认表格含企业名称、市、区县");

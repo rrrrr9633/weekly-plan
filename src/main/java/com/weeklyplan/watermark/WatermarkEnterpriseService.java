@@ -29,10 +29,12 @@ public class WatermarkEnterpriseService {
     this.modules = modules;
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public List<WatermarkEnterpriseResponse> list() {
     access();
-    return enterprises.findByCompanyIdOrderByCityAscCountyAscNameAsc(tenant.currentCompany().getId())
+    Long companyId = tenant.currentCompany().getId();
+    collapseDuplicates(companyId);
+    return enterprises.findByCompanyIdOrderByCityAscCountyAscNameAsc(companyId)
         .stream()
         .map(WatermarkEnterpriseResponse::of)
         .toList();
@@ -42,33 +44,47 @@ public class WatermarkEnterpriseService {
   public WatermarkEnterpriseImportResult importWorkbook(MultipartFile file) {
     access();
     Company company = tenant.currentCompany();
+    collapseDuplicates(company.getId());
+    List<WatermarkEnterprise> currentRows =
+        enterprises.findByCompanyIdOrderByCityAscCountyAscNameAsc(company.getId());
     List<ImportedWatermarkEnterprise> rows = workbook.parse(file);
     int inserted = 0, updated = 0, unchanged = 0, skipped = 0;
     for (ImportedWatermarkEnterprise row : rows) {
-      String name = row.name().trim();
-      String city = row.city().trim();
-      String county = row.county().trim();
+      String name = WatermarkPlaceText.clean(row.name());
+      String city = WatermarkPlaceText.clean(row.city());
+      String county = WatermarkPlaceText.clean(row.county());
       if (name.isBlank() || county.isBlank()) {
         skipped += 1;
         continue;
       }
-      var existing = enterprises.findByCompanyIdAndNameAndCityAndCounty(company.getId(), name, city, county);
-      if (existing.isEmpty()) {
-        enterprises.save(WatermarkEnterprise.create(
+      WatermarkEnterprise existing = WatermarkEnterpriseDeduper.match(currentRows, name, city, county);
+      if (existing == null) {
+        WatermarkEnterprise created = enterprises.save(WatermarkEnterprise.create(
             company, name, city, county, row.visit1At(), row.visit2At(), row.visit3At()
         ));
+        currentRows.add(created);
         inserted += 1;
         continue;
       }
-      WatermarkEnterprise current = existing.get();
-      if (!row.visitsProvided() || current.sameVisits(row.visit1At(), row.visit2At(), row.visit3At())) {
+      existing.completePlace(city, county);
+      if (!row.visitsProvided() || existing.sameVisits(row.visit1At(), row.visit2At(), row.visit3At())) {
         unchanged += 1;
         continue;
       }
-      current.replaceVisits(row.visit1At(), row.visit2At(), row.visit3At());
+      existing.replaceVisits(row.visit1At(), row.visit2At(), row.visit3At());
       updated += 1;
     }
     return new WatermarkEnterpriseImportResult(inserted, updated, unchanged, skipped);
+  }
+
+  private void collapseDuplicates(Long companyId) {
+    WatermarkEnterpriseDeduper.Plan plan = WatermarkEnterpriseDeduper.plan(
+        enterprises.findByCompanyIdOrderByCityAscCountyAscNameAsc(companyId)
+    );
+    if (plan.drop().isEmpty()) return;
+    enterprises.deleteAll(plan.drop());
+    enterprises.flush();
+    WatermarkEnterpriseDeduper.mergeIntoKeepers(plan);
   }
 
   private void access() {

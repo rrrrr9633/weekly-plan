@@ -42,6 +42,27 @@ public class WatermarkEnterprise {
     this.updatedAt = Instant.now();
   }
 
+  void absorb(WatermarkEnterprise other) {
+    completePlace(other.city, other.county);
+    if (this.visit1At == null) this.visit1At = other.visit1At;
+    if (this.visit2At == null) this.visit2At = other.visit2At;
+    if (this.visit3At == null) this.visit3At = other.visit3At;
+    this.updatedAt = Instant.now();
+  }
+
+  void completePlace(String city, String county) {
+    this.city = preferPlace(this.city, city);
+    this.county = preferPlace(this.county, county);
+  }
+
+  private static String preferPlace(String current, String other) {
+    String left = WatermarkPlaceText.clean(current);
+    String right = WatermarkPlaceText.clean(other);
+    if (left.isBlank()) return right;
+    if (right.isBlank()) return left;
+    return right.length() > left.length() ? right : left;
+  }
+
   public static WatermarkEnterprise create(
       Company company,
       String name,
