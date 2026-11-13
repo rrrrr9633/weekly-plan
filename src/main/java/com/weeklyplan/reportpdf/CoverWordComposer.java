@@ -1,7 +1,6 @@
 package com.weeklyplan.reportpdf;
 
 import org.apache.poi.util.Units;
-import org.apache.poi.xwpf.usermodel.BreakType;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
@@ -9,6 +8,9 @@ import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
 import org.apache.xmlbeans.XmlCursor;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTBr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageMar;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageSz;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSectPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.STBrType;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -18,12 +20,16 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.math.BigInteger;
 import java.util.List;
 
 @Component
 class CoverWordComposer {
-  private static final int MAX_WIDTH_EMU = 190 * 360000;
-  private static final int MAX_HEIGHT_EMU = 277 * 360000;
+  private static final int EMU_PER_MM = 36000;
+  private static final int PAGE_WIDTH_EMU = 210 * EMU_PER_MM;
+  private static final int PAGE_HEIGHT_EMU = 297 * EMU_PER_MM;
+  private static final BigInteger A4_WIDTH_TWIPS = BigInteger.valueOf(11906);
+  private static final BigInteger A4_HEIGHT_TWIPS = BigInteger.valueOf(16838);
 
   byte[] replaceFirstPage(byte[] docx, byte[] coverImage) {
     try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(docx))) {
@@ -47,12 +53,33 @@ class CoverWordComposer {
     cover.setAlignment(ParagraphAlignment.CENTER);
     cover.setSpacingBefore(0);
     cover.setSpacingAfter(0);
+    cover.setIndentationLeft(0);
+    cover.setIndentationRight(0);
     XWPFRun run = cover.createRun();
     int[] size = fitSize(coverImage);
     try (ByteArrayInputStream picture = new ByteArrayInputStream(coverImage)) {
       run.addPicture(picture, pictureType(coverImage), "cover", size[0], size[1]);
     }
-    run.addBreak(BreakType.PAGE);
+    applyCoverPage(cover);
+  }
+
+  private void applyCoverPage(XWPFParagraph cover) {
+    if (!cover.getCTP().isSetPPr()) cover.getCTP().addNewPPr();
+    CTSectPr sect = cover.getCTP().getPPr().isSetSectPr()
+        ? cover.getCTP().getPPr().getSectPr()
+        : cover.getCTP().getPPr().addNewSectPr();
+    CTPageSz size = sect.isSetPgSz() ? sect.getPgSz() : sect.addNewPgSz();
+    size.setW(A4_WIDTH_TWIPS);
+    size.setH(A4_HEIGHT_TWIPS);
+    CTPageMar margin = sect.isSetPgMar() ? sect.getPgMar() : sect.addNewPgMar();
+    BigInteger zero = BigInteger.ZERO;
+    margin.setTop(zero);
+    margin.setBottom(zero);
+    margin.setLeft(zero);
+    margin.setRight(zero);
+    margin.setHeader(zero);
+    margin.setFooter(zero);
+    margin.setGutter(zero);
   }
 
   private void dropOriginalFirstPage(XWPFDocument document) {
@@ -93,19 +120,19 @@ class CoverWordComposer {
   }
 
   private int[] fitSize(byte[] coverImage) {
-    int width = MAX_WIDTH_EMU;
-    int height = MAX_HEIGHT_EMU;
+    int width = PAGE_WIDTH_EMU;
+    int height = PAGE_HEIGHT_EMU;
     try {
       BufferedImage image = ImageIO.read(new ByteArrayInputStream(coverImage));
       if (image != null && image.getWidth() > 0 && image.getHeight() > 0) {
         double aspect = (double) image.getWidth() / image.getHeight();
-        double box = (double) MAX_WIDTH_EMU / MAX_HEIGHT_EMU;
+        double box = (double) PAGE_WIDTH_EMU / PAGE_HEIGHT_EMU;
         if (aspect > box) {
-          width = MAX_WIDTH_EMU;
-          height = (int) Math.round(MAX_WIDTH_EMU / aspect);
+          width = PAGE_WIDTH_EMU;
+          height = (int) Math.round(PAGE_WIDTH_EMU / aspect);
         } else {
-          height = MAX_HEIGHT_EMU;
-          width = (int) Math.round(MAX_HEIGHT_EMU * aspect);
+          height = PAGE_HEIGHT_EMU;
+          width = (int) Math.round(PAGE_HEIGHT_EMU * aspect);
         }
       }
     } catch (Exception ignored) {
