@@ -1,7 +1,9 @@
 package com.weeklyplan.watermark;
 
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -14,6 +16,11 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,6 +33,19 @@ public class WatermarkEnterpriseWorkbookService {
   private static final Pattern CITY = Pattern.compile("^.{1,12}市$");
   private static final Pattern COUNTY = Pattern.compile("^.{1,20}(?:市辖区|新区|区|县|旗)$");
   private static final Pattern COMPANY = Pattern.compile("公司|集团|厂|药业|企业");
+  private static final DateTimeFormatter[] DATE_TIMES = {
+      DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+      formatter("yyyy-M-d'T'H:mm[:ss]"),
+      formatter("yyyy-M-d H:mm[:ss]"),
+      formatter("yyyy/M/d H:mm[:ss]"),
+      formatter("yyyy.M.d H:mm[:ss]"),
+  };
+  private static final DateTimeFormatter[] DATES = {
+      DateTimeFormatter.ISO_LOCAL_DATE,
+      formatter("yyyy-M-d"),
+      formatter("yyyy/M/d"),
+      formatter("yyyy.M.d"),
+  };
   private final DataFormatter formatter = new DataFormatter(Locale.CHINA);
 
   public List<ImportedWatermarkEnterprise> parse(MultipartFile file) {
@@ -61,34 +81,70 @@ public class WatermarkEnterpriseWorkbookService {
   List<ImportedWatermarkEnterprise> parseGrid(List<List<String>> grid) {
     Header header = locateHeader(grid);
     Map<String, ImportedWatermarkEnterprise> unique = new LinkedHashMap<>();
+    boolean visitsProvided = header.visit1 >= 0 || header.visit2 >= 0 || header.visit3 >= 0;
     for (int rowIndex = header.rowIndex + 1; rowIndex < grid.size(); rowIndex++) {
       List<String> row = grid.get(rowIndex);
       String name = cell(row, header.name);
       if (name.isBlank()) continue;
       String city = cell(row, header.city);
       String county = cell(row, header.county);
-      unique.putIfAbsent(name + '\u0000' + city + '\u0000' + county, new ImportedWatermarkEnterprise(name, city, county));
+      LocalDateTime visit1 = parseVisitTime(cell(row, header.visit1));
+      LocalDateTime visit2 = parseVisitTime(cell(row, header.visit2));
+      LocalDateTime visit3 = parseVisitTime(cell(row, header.visit3));
+      unique.put(
+          name + '\u0000' + city + '\u0000' + county,
+          new ImportedWatermarkEnterprise(name, city, county, visit1, visit2, visit3, visitsProvided)
+      );
     }
     if (unique.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "没有解析到企业名称和区县，请确认表格含企业名称、市、区县");
     return List.copyOf(unique.values());
   }
 
+  static LocalDateTime parseVisitTime(String raw) {
+    if (raw == null) return null;
+    String value = raw.trim().replace('\u00a0', ' ');
+    if (value.isBlank() || value.equals("-") || value.equals("/") || value.equals("无")) return null;
+    value = value.replace('年', '-').replace('月', '-').replace("日", " ").replace('.', '/').replaceAll("\\s+", " ").trim();
+    for (DateTimeFormatter format : DATE_TIMES) {
+      try {
+        return LocalDateTime.parse(value, format);
+      } catch (Exception ignored) {
+      }
+    }
+    String datePart = value.split(" ")[0];
+    for (DateTimeFormatter format : DATES) {
+      try {
+        return LocalDate.parse(datePart, format).atStartOfDay();
+      } catch (Exception ignored) {
+      }
+    }
+    return null;
+  }
+
   private Header locateHeader(List<List<String>> grid) {
     for (int rowIndex = 0; rowIndex < Math.min(grid.size(), 8); rowIndex++) {
       List<String> row = grid.get(rowIndex);
-      int name = -1, city = -1, county = -1;
+      int name = -1, city = -1, county = -1, visit1 = -1, visit2 = -1, visit3 = -1;
       for (int column = 0; column < row.size(); column++) {
         String value = compact(row.get(column));
         if (value.isBlank()) continue;
         if (value.contains("企业名称") || value.equals("企业")) name = column;
         else if (value.equals("市") || value.equals("城市") || value.contains("地市")) city = column;
         else if (value.contains("县区") || value.contains("区县") || value.contains("区（县）") || value.contains("区(县)")) county = column;
+        else if (isVisitHeader(value, "一") || isVisitHeader(value, "1")) visit1 = column;
+        else if (isVisitHeader(value, "二") || isVisitHeader(value, "2")) visit2 = column;
+        else if (isVisitHeader(value, "三") || isVisitHeader(value, "3")) visit3 = column;
       }
-      if (name >= 0 && county >= 0) return new Header(rowIndex, name, city, county);
+      if (name >= 0 && county >= 0) return new Header(rowIndex, name, city, county, visit1, visit2, visit3);
     }
     Header inferred = inferHeader(grid);
     if (inferred != null) return inferred;
-    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "未识别到企业名称和区县列。截图那种表可以无表头：第1列企业名称、市、区县即可。");
+    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "未识别到企业名称和区县列。请用带表头的企业清单：企业名称、市、区(县)、三次诊断时间。");
+  }
+
+  private boolean isVisitHeader(String value, String ordinal) {
+    if (value.contains("报告") || value.contains("人员") || value.contains("诊断人")) return false;
+    return value.contains("第" + ordinal) && (value.contains("时间") || value.contains("诊断"));
   }
 
   private Header inferHeader(List<List<String>> grid) {
@@ -109,7 +165,7 @@ public class WatermarkEnterpriseWorkbookService {
     int city = best(cities, name, -1);
     int county = best(counties, name, city);
     if (name < 0 || county < 0) return null;
-    return new Header(-1, name, city, county);
+    return new Header(-1, name, city, county, -1, -1, -1);
   }
 
   private int best(int[] scores, int skipA, int skipB) {
@@ -123,7 +179,12 @@ public class WatermarkEnterpriseWorkbookService {
 
   private String text(Row row, int column) {
     Cell cell = row.getCell(column);
-    return cell == null ? "" : formatter.formatCellValue(cell).trim().replace('\n', ' ');
+    if (cell == null) return "";
+    if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+      LocalDateTime time = cell.getLocalDateTimeCellValue();
+      return time == null ? "" : time.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+    }
+    return formatter.formatCellValue(cell).trim().replace('\n', ' ');
   }
 
   private String cell(List<String> row, int column) {
@@ -162,5 +223,13 @@ public class WatermarkEnterpriseWorkbookService {
     return new String(bytes, Charset.forName("GBK"));
   }
 
-  private record Header(int rowIndex, int name, int city, int county) {}
+  private static DateTimeFormatter formatter(String pattern) {
+    return new DateTimeFormatterBuilder()
+        .parseCaseInsensitive()
+        .appendPattern(pattern)
+        .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
+        .toFormatter(Locale.CHINA);
+  }
+
+  private record Header(int rowIndex, int name, int city, int county, int visit1, int visit2, int visit3) {}
 }

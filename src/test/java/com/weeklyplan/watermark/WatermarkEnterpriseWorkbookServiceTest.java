@@ -62,6 +62,26 @@ class WatermarkEnterpriseWorkbookServiceTest {
     );
   }
 
+  @Test
+  void readsVisitTimesAndIgnoresStaffColumns() throws Exception {
+    byte[] workbook = workbook(sheet -> {
+      writeRow(sheet, 0, "姓名", "企业名称", "市", "区(县)", "诊断人", "第一次诊断时间", "照片内人员", "第二次诊断时间", "照片内人员", "第三次诊断时间", "报告编制日期");
+      writeRow(sheet, 1, "李光宇", "沈阳沈大内窥镜有限公司", "沈阳", "大东区", "李光宇", "2026/5/13 13:56", "甲", "2026/5/22 13:32", "乙", "2026/6/12 9:00", "6/1");
+      writeRow(sheet, 2, "李光宇", "潮州安宫药业有限公司", "潮州", "太和区", "李光宇", "2026/5/27 13:32", "甲", "", "乙", "", "6/1");
+    });
+
+    var rows = importer.parse(file("诊断时间.xlsx", workbook));
+    assertEquals("沈阳沈大内窥镜有限公司", rows.get(0).name());
+    assertEquals("大东区", rows.get(0).county());
+    assertEquals(true, rows.get(0).visitsProvided());
+    assertEquals("2026-05-13T13:56", rows.get(0).visit1At().toString());
+    assertEquals("2026-05-22T13:32", rows.get(0).visit2At().toString());
+    assertEquals("2026-06-12T09:00", rows.get(0).visit3At().toString());
+    assertEquals("2026-05-27T13:32", rows.get(1).visit1At().toString());
+    assertEquals(null, rows.get(1).visit2At());
+    assertEquals(null, rows.get(1).visit3At());
+  }
+
   private byte[] workbook(SheetWriter writer) throws Exception {
     try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
       writer.write(workbook.createSheet("企业"));

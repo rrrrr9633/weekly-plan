@@ -43,7 +43,7 @@ public class WatermarkEnterpriseService {
     access();
     Company company = tenant.currentCompany();
     List<ImportedWatermarkEnterprise> rows = workbook.parse(file);
-    int inserted = 0, existed = 0, skipped = 0;
+    int inserted = 0, updated = 0, unchanged = 0, skipped = 0;
     for (ImportedWatermarkEnterprise row : rows) {
       String name = row.name().trim();
       String city = row.city().trim();
@@ -52,14 +52,23 @@ public class WatermarkEnterpriseService {
         skipped += 1;
         continue;
       }
-      if (enterprises.findByCompanyIdAndNameAndCityAndCounty(company.getId(), name, city, county).isPresent()) {
-        existed += 1;
+      var existing = enterprises.findByCompanyIdAndNameAndCityAndCounty(company.getId(), name, city, county);
+      if (existing.isEmpty()) {
+        enterprises.save(WatermarkEnterprise.create(
+            company, name, city, county, row.visit1At(), row.visit2At(), row.visit3At()
+        ));
+        inserted += 1;
         continue;
       }
-      enterprises.save(WatermarkEnterprise.create(company, name, city, county));
-      inserted += 1;
+      WatermarkEnterprise current = existing.get();
+      if (!row.visitsProvided() || current.sameVisits(row.visit1At(), row.visit2At(), row.visit3At())) {
+        unchanged += 1;
+        continue;
+      }
+      current.replaceVisits(row.visit1At(), row.visit2At(), row.visit3At());
+      updated += 1;
     }
-    return new WatermarkEnterpriseImportResult(inserted, existed, skipped);
+    return new WatermarkEnterpriseImportResult(inserted, updated, unchanged, skipped);
   }
 
   private void access() {

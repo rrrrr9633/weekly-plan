@@ -1,0 +1,4 @@
+ALTER TABLE watermark_enterprises
+  ADD COLUMN visit1_at DATETIME NULL,
+  ADD COLUMN visit2_at DATETIME NULL,
+  ADD COLUMN visit3_at DATETIME NULL;
