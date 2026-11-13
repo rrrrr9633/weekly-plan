@@ -23,7 +23,7 @@ public class ApiExceptionHandler {
 
   @ExceptionHandler(MaxUploadSizeExceededException.class)
   public ResponseEntity<ApiErrorResponse> handleTooLarge(MaxUploadSizeExceededException error) {
-    return ResponseEntity.badRequest().body(new ApiErrorResponse(HttpStatus.BAD_REQUEST.value(), "文件过大，请上传 20MB 以内的表格"));
+    return ResponseEntity.badRequest().body(new ApiErrorResponse(HttpStatus.BAD_REQUEST.value(), "文件过大，请把 Word 和封面图控制在 80MB 以内"));
   }
 
   @ExceptionHandler(ResponseStatusException.class)

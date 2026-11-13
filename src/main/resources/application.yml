@@ -14,8 +14,8 @@ spring:
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
   servlet:
     multipart:
-      max-file-size: 20MB
-      max-request-size: 20MB
+      max-file-size: 80MB
+      max-request-size: 80MB
   jpa:
     hibernate:
       ddl-auto: validate
@@ -33,6 +33,7 @@ app:
     model: ${AI_MODEL:}
     wire-api: ${AI_WIRE_API:responses}
     request-timeout-seconds: ${AI_REQUEST_TIMEOUT_SECONDS:180}
+  libreoffice-bin: ${LIBREOFFICE_BIN:}
   bootstrap-admin:
     username: ${BOOTSTRAP_ADMIN_USERNAME:admin}
     password: ${BOOTSTRAP_ADMIN_PASSWORD:Admin12345}
