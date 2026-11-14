@@ -40,6 +40,10 @@ public class ReportPdfService {
   public record Export(byte[] bytes, String filename, MediaType mediaType) {}
 
   public Export convert(MultipartFile report, MultipartFile cover, String format) {
+    return convert(report, cover, format, null);
+  }
+
+  public Export convert(MultipartFile report, MultipartFile cover, String format, ReportPdfProgress progress) {
     modules.requireEnabled(MODULE);
     if (report == null || report.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请上传 Word 或 PDF 报告");
     if (cover == null || cover.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请上传封面图片");
@@ -47,13 +51,16 @@ public class ReportPdfService {
     String coverName = filename(cover);
     if (!isImage(coverName)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "封面请上传 jpg 或 png");
     boolean asWord = isWordFormat(format);
+    tick(progress, 18, "saving", "正在接收文件");
     try {
       byte[] reportBytes = report.getBytes();
+      byte[] coverBytes = cover.getBytes();
       if (isPdf(reportName, reportBytes)) {
         if (asWord) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PDF 报告只能导出 PDF，请改选 PDF");
+        tick(progress, 40, "composing", "PDF 不用转 Word，正在替换第 1 页");
         return new Export(
-            pdfComposer.replaceFirstPage(reportBytes, cover.getBytes()),
-            outputName(report, false),
+            pdfComposer.replaceFirstPage(reportBytes, coverBytes, progress),
+            outputName(reportName, false),
             MediaType.APPLICATION_PDF
         );
       }
@@ -62,12 +69,20 @@ public class ReportPdfService {
       try {
         Path input = work.resolve(safeName(reportName, ".docx"));
         Files.write(input, reportBytes);
+        reportBytes = null;
         if (asWord) {
-          byte[] docx = converter.convertToDocx(input, work);
-          return new Export(wordComposer.replaceFirstPage(docx, cover.getBytes()), outputName(report, true), DOCX);
+          tick(progress, 30, "converting", "正在准备 Word");
+          byte[] docx = converter.convertToDocx(input, work, progress);
+          tick(progress, 82, "composing", "正在把封面插入 Word 第 1 页");
+          return new Export(wordComposer.replaceFirstPage(docx, coverBytes), outputName(reportName, true), DOCX);
         }
-        byte[] pdf = converter.convertWord(input, work);
-        return new Export(pdfComposer.replaceFirstPage(pdf, cover.getBytes()), outputName(report, false), MediaType.APPLICATION_PDF);
+        tick(progress, 26, "converting", "正在把 Word 转成 PDF，这一步最慢");
+        Path pdf = converter.convertWordToFile(input, work, progress);
+        return new Export(
+            pdfComposer.replaceFirstPage(pdf, coverBytes, progress),
+            outputName(reportName, false),
+            MediaType.APPLICATION_PDF
+        );
       } finally {
         deleteQuietly(work);
       }
@@ -78,11 +93,20 @@ public class ReportPdfService {
     }
   }
 
-  public String outputName(MultipartFile word, boolean asWord) {
-    String name = filename(word);
+  public String outputName(String originalName, boolean asWord) {
+    String name = originalName == null ? "" : originalName.replace('\\', '/');
+    name = name.substring(name.lastIndexOf('/') + 1);
     int dot = name.lastIndexOf('.');
     String stem = dot > 0 ? name.substring(0, dot) : (name.isBlank() ? "报告" : name);
     return stem + (asWord ? "-盖章封面.docx" : "-盖章封面.pdf");
+  }
+
+  public String outputName(MultipartFile word, boolean asWord) {
+    return outputName(filename(word), asWord);
+  }
+
+  private void tick(ReportPdfProgress progress, int percent, String stage, String message) {
+    if (progress != null) progress.update(percent, stage, message);
   }
 
   private boolean isWordFormat(String format) {
