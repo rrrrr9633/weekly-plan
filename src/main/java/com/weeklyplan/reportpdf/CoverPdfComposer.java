@@ -14,10 +14,10 @@ import java.io.ByteArrayOutputStream;
 
 @Component
 class CoverPdfComposer {
-  byte[] replaceFirstPage(byte[] wordPdf, byte[] coverImage) {
-    try (PDDocument source = Loader.loadPDF(wordPdf); PDDocument output = new PDDocument()) {
+  byte[] replaceFirstPage(byte[] reportPdf, byte[] coverImage) {
+    try (PDDocument source = Loader.loadPDF(reportPdf); PDDocument output = new PDDocument()) {
       if (source.getNumberOfPages() == 0) {
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Word 转出的 PDF 是空的");
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "这份 PDF 是空的");
       }
       PDPage cover = new PDPage(PDRectangle.A4);
       output.addPage(cover);
@@ -45,7 +45,7 @@ class CoverPdfComposer {
     } catch (ResponseStatusException error) {
       throw error;
     } catch (Exception error) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无法把封面图和 Word 页合并成 PDF");
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无法把封面图和报告页合并成 PDF");
     }
   }
 }

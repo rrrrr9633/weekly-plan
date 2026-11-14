@@ -39,32 +39,42 @@ public class ReportPdfService {
 
   public record Export(byte[] bytes, String filename, MediaType mediaType) {}
 
-  public Export convert(MultipartFile word, MultipartFile cover, String format) {
+  public Export convert(MultipartFile report, MultipartFile cover, String format) {
     modules.requireEnabled(MODULE);
-    if (word == null || word.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请上传 Word 报告");
+    if (report == null || report.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请上传 Word 或 PDF 报告");
     if (cover == null || cover.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请上传封面图片");
-    String wordName = filename(word);
+    String reportName = filename(report);
     String coverName = filename(cover);
-    if (!isWord(wordName)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "报告请上传 .doc 或 .docx");
     if (!isImage(coverName)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "封面请上传 jpg 或 png");
     boolean asWord = isWordFormat(format);
-    Path work = null;
     try {
-      work = Files.createTempDirectory("report-pdf-");
-      Path input = work.resolve(safeName(wordName, ".docx"));
-      Files.write(input, word.getBytes());
-      if (asWord) {
-        byte[] docx = converter.convertToDocx(input, work);
-        return new Export(wordComposer.replaceFirstPage(docx, cover.getBytes()), outputName(word, true), DOCX);
+      byte[] reportBytes = report.getBytes();
+      if (isPdf(reportName, reportBytes)) {
+        if (asWord) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PDF 报告只能导出 PDF，请改选 PDF");
+        return new Export(
+            pdfComposer.replaceFirstPage(reportBytes, cover.getBytes()),
+            outputName(report, false),
+            MediaType.APPLICATION_PDF
+        );
       }
-      byte[] pdf = converter.convertWord(input, work);
-      return new Export(pdfComposer.replaceFirstPage(pdf, cover.getBytes()), outputName(word, false), MediaType.APPLICATION_PDF);
+      if (!isWord(reportName)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "报告请上传 .doc、.docx 或 .pdf");
+      Path work = Files.createTempDirectory("report-pdf-");
+      try {
+        Path input = work.resolve(safeName(reportName, ".docx"));
+        Files.write(input, reportBytes);
+        if (asWord) {
+          byte[] docx = converter.convertToDocx(input, work);
+          return new Export(wordComposer.replaceFirstPage(docx, cover.getBytes()), outputName(report, true), DOCX);
+        }
+        byte[] pdf = converter.convertWord(input, work);
+        return new Export(pdfComposer.replaceFirstPage(pdf, cover.getBytes()), outputName(report, false), MediaType.APPLICATION_PDF);
+      } finally {
+        deleteQuietly(work);
+      }
     } catch (ResponseStatusException error) {
       throw error;
     } catch (IOException error) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无法处理上传的 Word 或封面图");
-    } finally {
-      deleteQuietly(work);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无法处理上传的报告或封面图");
     }
   }
 
@@ -83,6 +93,12 @@ public class ReportPdfService {
   private boolean isWord(String name) {
     String lower = name.toLowerCase(Locale.ROOT);
     return lower.endsWith(".doc") || lower.endsWith(".docx");
+  }
+
+  private boolean isPdf(String name, byte[] bytes) {
+    if (name.toLowerCase(Locale.ROOT).endsWith(".pdf")) return true;
+    return bytes != null && bytes.length >= 5
+        && bytes[0] == '%' && bytes[1] == 'P' && bytes[2] == 'D' && bytes[3] == 'F' && bytes[4] == '-';
   }
 
   private boolean isImage(String name) {
